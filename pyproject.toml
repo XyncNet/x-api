@@ -1,0 +1,16 @@
+[project]
+name = "tortoise-api"
+requires-python = ">=3.9"
+authors = [
+    {name = "Artemiev", email = "mixartemev@gmail.com"},
+]
+dependencies = [
+    "starlette",
+    "tortoise-orm[asyncpg]",
+    "python-dotenv",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://gitlab.com/mixartemev/tortoise-api"
+Repository = "https://gitlab.com/mixartemev/tortoise-api"
