@@ -1,7 +1,6 @@
 import logging
 from datetime import datetime
 from inspect import getmembers
-
 from os import getenv as env
 from dotenv import load_dotenv
 from starlette.applications import Starlette
@@ -15,6 +14,7 @@ from tortoise.queryset import QuerySet
 
 
 class Api:
+    app: Starlette
     def __init__(
         self,
         models_module,
@@ -27,23 +27,26 @@ class Api:
             models_module: Admin title.
             # auth_provider: Authentication Provider
         """
-        self.routes: [Route] = []
         self.as_dict: bool = as_dict
         models = getmembers(models_module)
         self.models: {str: Model} = {k: v for k, v in models if isinstance(v, type(Model)) and v.mro()[0] != Model}
         self.templates = Jinja2Templates("templates")
-
-        self.app = Starlette(debug=debug, routes=[
+        self.routes: [Route] = [
             Route('/', self.menu, methods=['GET']),
             Route('/{model}', self.index, methods=['GET', 'POST']),
             # Route('/{user_id}', user),
-        ])
+        ]
+        self.debug = debug
+        self.models_module = models_module
 
-        load_dotenv()
-        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [models_module]}, generate_schemas=debug)
 
-        if debug:
+    def app(self):
+        if self.debug:
             logging.basicConfig(level=logging.DEBUG)
+        self.app = Starlette(debug=self.debug, routes=self.routes)
+        load_dotenv()
+        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [self.models_module]}, generate_schemas=self.debug)
+        return self.app
 
 
     # ROUTES
