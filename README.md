@@ -7,7 +7,7 @@ Fully async Zero config One line ASGI app
 
 ### INSTALL
 ```bash
-pip install git+ssh://git@gitlab.com/mixartemev/tortoise-api.git
+pip install git+ssh://git@github.com/mixartemev/tortoise-api.git
 ```
 
 ### Run your app

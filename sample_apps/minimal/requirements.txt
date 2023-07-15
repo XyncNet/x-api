@@ -1,1 +1,1 @@
-git+ssh://git@gitlab.com/mixartemev/tortoise-api.git
+git+https://github.com/mixartemev/tortoise-api

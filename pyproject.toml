@@ -12,5 +12,8 @@ dependencies = [
 dynamic = ["version"]
 
 [project.urls]
-Homepage = "https://gitlab.com/mixartemev/tortoise-api"
-Repository = "https://gitlab.com/mixartemev/tortoise-api"
+Homepage = "https://github.com/mixartemev/tortoise-api"
+Repository = "https://github.com/mixartemev/tortoise-api"
+
+[tool.setuptools]
+packages = ["tortoise_api"]
