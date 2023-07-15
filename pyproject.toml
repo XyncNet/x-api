@@ -17,3 +17,6 @@ Repository = "https://github.com/mixartemev/tortoise-api"
 
 [tool.setuptools]
 packages = ["tortoise_api"]
+
+[tool.setuptools.dynamic]
+version = {attr = "tortoise_api.__version__"}
