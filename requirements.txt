@@ -1,0 +1,4 @@
+python-dotenv
+starlette
+tortoise-orm[asyncpg]
+uvicorn
