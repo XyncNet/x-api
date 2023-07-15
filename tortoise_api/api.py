@@ -6,11 +6,12 @@ from os import getenv as env
 from dotenv import load_dotenv
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, HTMLResponse
 from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 from tortoise import Model
 from tortoise.contrib.starlette import register_tortoise
+from tortoise.queryset import QuerySet
 
 
 class Api:
@@ -18,7 +19,8 @@ class Api:
         self,
         models_module,
         debug: bool = False,
-        # auth_provider: Optional[AuthProvider] = None,
+        as_dict: bool = True
+        # auth_provider: AuthProvider = None, # todo: add auth
     ):
         """
         Parameters:
@@ -26,11 +28,13 @@ class Api:
             # auth_provider: Authentication Provider
         """
         self.routes: [Route] = []
+        self.as_dict: bool = as_dict
         models = getmembers(models_module)
-        self.models: {str: Model} = {k: v for k, v in models if isinstance(v, type(Model))}
+        self.models: {str: Model} = {k: v for k, v in models if isinstance(v, type(Model)) and v.mro()[0] != Model}
         self.templates = Jinja2Templates("templates")
 
         self.app = Starlette(debug=debug, routes=[
+            Route('/', self.menu, methods=['GET']),
             Route('/{model}', self.index, methods=['GET', 'POST']),
             # Route('/{user_id}', user),
         ])
@@ -43,9 +47,14 @@ class Api:
 
 
     # ROUTES
+    async def menu(self, _: Request):
+        body: str = '<br>'.join(f'<a href="/{model}">{model}</a>' for model in self.models)
+        return HTMLResponse(body)
+
     async def index(self, request: Request):
-        data = await self._get_model(request).all().values_list()
-        return JSONResponse({'data': self.jsonify(data)})
+        fn: callable = QuerySet.values if self.as_dict else QuerySet.values_list
+        data = await fn(self._get_model(request).all())
+        return JSONResponse({'data': self._jsonify(data)})
 
 
     # UTILS
@@ -53,9 +62,11 @@ class Api:
         model_id: str = request.path_params['model']
         return self.models[model_id]
 
-    @staticmethod
-    def jsonify(data: [Model]):
+    def _jsonify(self, data: [Model]):
         trans_type_json = {
             datetime: lambda x: x.__str__().split('+')[0]
         }
+        if self.as_dict:
+            return [{k: fn(v) if (fn := trans_type_json.get(type(v))) else v for k, v in d.items()} for d in data]
+        # format for datatables
         return [[fn(v) if (fn := trans_type_json.get(type(v))) else v for v in d] for d in data]
