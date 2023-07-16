@@ -33,8 +33,8 @@ class Api:
         self.templates = Jinja2Templates("templates")
         self.routes: [Route] = [
             Route('/', self.menu, methods=['GET']),
-            Route('/{model}', self.index, methods=['GET', 'POST']),
-            # Route('/{user_id}', user),
+            Route('/{model}', self.api_all, methods=['GET', 'POST']),
+            Route('/{model}/{oid}', self.api_one, methods=['GET', 'POST']),
         ]
         self.debug = debug
         self.models_module = models_module
@@ -54,10 +54,14 @@ class Api:
         body: str = '<br>'.join(f'<a href="/{model}">{model}</a>' for model in self.models)
         return HTMLResponse(body)
 
-    async def index(self, request: Request):
+    async def api_all(self, request: Request):
         fn: callable = QuerySet.values if self.as_dict else QuerySet.values_list
         data = await fn(self._get_model(request).all())
         return JSONResponse({'data': self._jsonify(data)})
+
+    async def api_one(self, request: Request):
+        obj = await self._get_model(request).get(id=request.path_params['oid']).values()
+        return JSONResponse(self._jsonify([obj])[0])
 
 
     # UTILS
