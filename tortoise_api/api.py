@@ -19,7 +19,7 @@ class Api:
         self,
         models_module,
         debug: bool = False,
-        as_dict: bool = True
+        for_dt: bool = False
         # auth_provider: AuthProvider = None, # todo: add auth
     ):
         """
@@ -27,7 +27,7 @@ class Api:
             models_module: Admin title.
             # auth_provider: Authentication Provider
         """
-        self.as_dict: bool = as_dict
+        self.for_dt: bool = for_dt
         models = getmembers(models_module)
         self.models: {str: Model} = {k: v for k, v in models if isinstance(v, type(Model)) and v.mro()[0] != Model}
         self.templates = Jinja2Templates("templates")
@@ -39,8 +39,7 @@ class Api:
         self.debug = debug
         self.models_module = models_module
 
-
-    def app(self):
+    def start(self):
         if self.debug:
             logging.basicConfig(level=logging.DEBUG)
         self.app = Starlette(debug=self.debug, routes=self.routes)
@@ -48,15 +47,15 @@ class Api:
         register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [self.models_module]}, generate_schemas=self.debug)
         return self.app
 
-
     # ROUTES
     async def menu(self, _: Request):
         body: str = '<br>'.join(f'<a href="/{model}">{model}</a>' for model in self.models)
         return HTMLResponse(body)
 
     async def api_all(self, request: Request):
-        fn: callable = QuerySet.values if self.as_dict else QuerySet.values_list
-        data = await fn(self._get_model(request).all())
+        data: [{str: Model}] = await self._get_model(request).all().values()
+        if self.for_dt:
+            data = [d.values() for d in data]
         return JSONResponse({'data': self._jsonify(data)})
 
     async def api_one(self, request: Request):
@@ -71,9 +70,9 @@ class Api:
 
     def _jsonify(self, data: [Model]):
         trans_type_json = {
-            datetime: lambda x: x.__str__().split('+')[0]
+            datetime: lambda x: x.__str__().split('.')[0].split('+')[0]
         }
-        if self.as_dict:
-            return [{k: fn(v) if (fn := trans_type_json.get(type(v))) else v for k, v in d.items()} for d in data]
-        # format for datatables
-        return [[fn(v) if (fn := trans_type_json.get(type(v))) else v for v in d] for d in data]
+        if self.for_dt:
+            # format for datatables
+            return [[fn(v) if (fn := trans_type_json.get(type(v))) else v for v in d] for d in data]
+        return [{k: fn(v) if (fn := trans_type_json.get(type(v))) else v for k, v in d.items()} for d in data]
