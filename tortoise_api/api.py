@@ -32,7 +32,7 @@ class Api:
         self.models: {str: Model} = {k: v for k, v in models if isinstance(v, type(Model)) and v.mro()[0] != Model}
         self.templates = Jinja2Templates("templates")
         self.routes: [Route] = [
-            Route('/', self.menu, methods=['GET']),
+            Route('/', self.api_menu, methods=['GET']),
             Route('/{model}', self.api_all, methods=['GET', 'POST']),
             Route('/{model}/{oid}', self.api_one, methods=['GET', 'POST']),
         ]
@@ -48,9 +48,9 @@ class Api:
         return self.app
 
     # ROUTES
-    async def menu(self, _: Request):
-        body: str = '<br>'.join(f'<a href="/{model}">{model}</a>' for model in self.models)
-        return HTMLResponse(body)
+    async def api_menu(self, _: Request):
+        # body: str = '<br>'.join(f'<a href="/{model}">{model}</a>' for model in )
+        return JSONResponse(list(self.models))
 
     async def api_all(self, request: Request):
         data: [{str: Model}] = await self._get_model(request).all().values()

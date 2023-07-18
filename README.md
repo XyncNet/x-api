@@ -17,12 +17,12 @@ pip install git+ssh://git@github.com/mixartemev/tortoise-api.git
 from tortoise_api.api import Api
 import models
 
-app = Api(models).app
+app = Api(models)
 ```
 - Set `DB_URL` env variable in `.env` file
 - Run it:
 ```bash
-uvicorn main:app
+uvicorn main:app.start
 ```
 Or you can just fork Completed minimal runnable example from [sample apps](https://github.com/mixartemev/tortoise-api/blob/master/sample_apps/minimal/).
 
