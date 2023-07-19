@@ -11,7 +11,7 @@ def _api_repr(obj: Model) -> dict:
             data[key] = data[key].__str__().split('.')[0].split('+')[0]
         elif isinstance(field, RelationalField):
             if isinstance(data[key], ReverseRelation) and isinstance(data[key].related_objects, list):
-                data[key] = [d.repr() for d in data[key]]
+                data[key] = [d.repr() for d in data[key].related_objects]
             elif data[key]:
                 data[key] = data[key].repr()
     return data

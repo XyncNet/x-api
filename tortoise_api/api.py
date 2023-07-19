@@ -70,7 +70,8 @@ class Api:
         return JSONResponse({'data': data})
 
     async def api_one(self, request: Request):
-        obj = await self._get_model(request).get(id=request.path_params['oid']).values()
+        model: Model = self._get_model(request)
+        obj = await self._get_model(request).get(id=request.path_params['oid']).prefetch_related(*model._meta.fetch_fields)
         return JSONResponse(self._jsonify([obj])[0])
 
 
