@@ -3,7 +3,7 @@ from tortoise import Model
 from tortoise.fields.relational import RelationalField, ReverseRelation
 
 
-def _api_repr(obj: Model) -> dict:
+def jsonify(obj: Model) -> dict:
     data = {}
     for key, field in obj._meta.fields_map.items():
         data[key] = getattr(obj, key)

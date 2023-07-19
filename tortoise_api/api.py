@@ -10,7 +10,7 @@ from starlette.templating import Jinja2Templates
 from tortoise import Model as BaseModel
 from tortoise.contrib.starlette import register_tortoise
 
-from tortoise_api.util import _api_repr
+from tortoise_api.util import jsonify
 
 
 class Model(BaseModel):
@@ -27,7 +27,6 @@ class Api:
         self,
         models_module,
         debug: bool = False,
-        for_dt: bool = False
         # auth_provider: AuthProvider = None, # todo: add auth
     ):
         """
@@ -35,13 +34,12 @@ class Api:
             models_module: Admin title.
             # auth_provider: Authentication Provider
         """
-        self.for_dt: bool = for_dt
         models = getmembers(models_module)
         self.models: {str: Model} = {k: v for k, v in models if isinstance(v, type(Model)) and v.mro()[0] != Model}
         self.templates = Jinja2Templates("templates")
         self.routes: [Route] = [
             Route('/{model}/{oid}', self.api_one, methods=['GET', 'POST']),
-            Route('/favicon.ico', lambda req: Response(), methods=['GET']),
+            Route('/favicon.ico', lambda req: Response(), methods=['GET']),  # avoid chrome auto favicon load
             Route('/{model}', self.api_all, methods=['GET', 'POST']),
             Route('/', self.api_menu, methods=['GET']),
         ]
@@ -58,31 +56,21 @@ class Api:
 
     # ROUTES
     async def api_menu(self, _: Request):
-        # body: str = '<br>'.join(f'<a href="/{model}">{model}</a>' for model in )
         return JSONResponse(list(self.models))
 
     async def api_all(self, request: Request):
         model: Model = self._get_model(request)
         objects: [{str: Model}] = await model.all().prefetch_related(*model._meta.fetch_fields)
-        data = self._jsonify(objects)
-        # if self.for_dt:
-        #     data = [d.values() for d in data]
+        data = [jsonify(d) for d in objects]
         return JSONResponse({'data': data})
 
     async def api_one(self, request: Request):
         model: Model = self._get_model(request)
         obj = await self._get_model(request).get(id=request.path_params['oid']).prefetch_related(*model._meta.fetch_fields)
-        return JSONResponse(self._jsonify([obj])[0])
+        return JSONResponse(jsonify(obj))
 
 
     # UTILS
     def _get_model(self, request: Request) -> type(Model):
         model_id: str = request.path_params['model']
         return self.models.get(model_id)
-
-
-    def _jsonify(self, data: [Model]):
-        # if self.for_dt:
-        #     # format for datatables
-        #     return [[fn(v) if (fn := trans_type_json.get(type(v))) else v for v in d] for d in data]
-        return [_api_repr(d) for d in data]
