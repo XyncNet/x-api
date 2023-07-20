@@ -5,8 +5,9 @@ authors = [
     {name = "Artemiev", email = "mixartemev@gmail.com"},
 ]
 keywords = ["starlette", "fastapi", "admin", "dashboard", "datatables", "crud", "tortoise-orm", "ASGI-admin"]
+description = "Simplest fastest minimal REST API CRUD generator for Tortoise ORM models"
 readme = "README.md"
-license = "MIT"
+license = {file = "LICENSE"}
 dependencies = [
     "python-dotenv",
     "starlette",
