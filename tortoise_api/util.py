@@ -13,8 +13,9 @@ def jsonify(obj: Model) -> dict:
                 return rel_pack(prop)
             elif isinstance(prop, ReverseRelation) and isinstance(prop.related_objects, list):
                 return [rel_pack(d) for d in prop.related_objects]
-            else:
-                return '[X]'
+            elif prop is None:
+                return ''
+            return '[X]'
         else:
             return getattr(obj, key)
 
