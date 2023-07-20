@@ -9,13 +9,13 @@ description = "Simplest fastest minimal REST API CRUD generator for Tortoise ORM
 readme = "README.md"
 license = {text = "MIT"}
 dependencies = [
+    "asyncpg",
     "python-dotenv",
     "starlette",
     "tortoise-api-model",
-    "tortoise-orm[asyncpg]",
     "uvicorn"
 ]
-version = "0.0.8"
+version = "0.0.9"
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"
