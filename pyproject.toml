@@ -4,12 +4,16 @@ requires-python = ">=3.9"
 authors = [
     {name = "Artemiev", email = "mixartemev@gmail.com"},
 ]
+keywords = ["starlette", "fastapi", "admin", "dashboard", "datatables", "crud", "tortoise-orm", "ASGI-admin"]
+readme = "README.md"
+license = "MIT"
 dependencies = [
+    "python-dotenv",
     "starlette",
     "tortoise-orm[asyncpg]",
-    "python-dotenv",
+    "uvicorn"
 ]
-dynamic = ["version"]
+version = "0.0.7"
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"
@@ -17,6 +21,3 @@ Repository = "https://github.com/mixartemev/tortoise-api"
 
 [tool.setuptools]
 packages = ["tortoise_api"]
-
-[tool.setuptools.dynamic]
-version = {attr = "tortoise_api.__version__"}

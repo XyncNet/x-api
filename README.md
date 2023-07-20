@@ -7,14 +7,28 @@ Fully async Zero config One line ASGI app
 
 ### INSTALL
 ```bash
-pip install git+ssh://git@github.com/mixartemev/tortoise-api.git
+pip install tortoise-api
 ```
 
 ### Run your app
 - Describe your db models with Tortoise ORM in `models.py` module
+```python
+from tortoise_api import Model
+
+class User(Model):
+    id: int = fields.IntField(pk=True)
+    name: str = fields.CharField(255, unique=True, null=False)
+    posts: fields.ReverseRelation["Post"]
+
+class Post(Model):
+    id: int = fields.IntField(pk=True)
+    text: str = fields.CharField(4095)
+    user: User = fields.ForeignKeyField('models.User', related_name='posts')
+    _name = 'text' # `_name` sets the attr for displaying related Post instace inside User (default='name')
+```
 - Write run script `main.py`: pass your models module in Api app:
 ```python
-from tortoise_api.api import Api
+from tortoise_api import Api
 import models
 
 app = Api().start(models)
