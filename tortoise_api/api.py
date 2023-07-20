@@ -1,5 +1,4 @@
 import logging
-from inspect import getmembers
 from os import getenv as env
 from dotenv import load_dotenv
 from starlette.applications import Starlette
@@ -23,19 +22,18 @@ class Model(BaseModel):
 
 class Api:
     app: Starlette
+    models: {str: Model}
+
     def __init__(
         self,
-        models_module,
         debug: bool = False,
         # auth_provider: AuthProvider = None, # todo: add auth
     ):
         """
         Parameters:
-            models_module: Admin title.
+            debug: Debug SQL queries, api requests
             # auth_provider: Authentication Provider
         """
-        models = getmembers(models_module)
-        self.models: {str: Model} = {k: v for k, v in models if isinstance(v, type(Model)) and v.mro()[0] != Model}
         self.templates = Jinja2Templates("templates")
         self.routes: [Route] = [
             Route('/{model}/{oid}', self.api_one, methods=['GET', 'POST']),
@@ -44,14 +42,14 @@ class Api:
             Route('/', self.api_menu, methods=['GET']),
         ]
         self.debug = debug
-        self.models_module = models_module
 
-    def start(self):
+    def start(self, models_module):
+        self.models = {key: model for key in dir(models_module) if isinstance(model := getattr(models_module, key), type(Model)) and model.mro()[1]==Model}
         if self.debug:
             logging.basicConfig(level=logging.DEBUG)
         self.app = Starlette(debug=self.debug, routes=self.routes)
         load_dotenv()
-        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [self.models_module]}, generate_schemas=self.debug)
+        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [models_module]}, generate_schemas=self.debug)
         return self.app
 
     # ROUTES
@@ -60,8 +58,8 @@ class Api:
 
     async def api_all(self, request: Request):
         model: Model = self._get_model(request)
-        objects: [{str: Model}] = await model.all().prefetch_related(*model._meta.fetch_fields)
-        data = [jsonify(d) for d in objects]
+        objects: [Model] = await model.all().prefetch_related(*model._meta.fetch_fields)
+        data = [jsonify(obj) for obj in objects]
         return JSONResponse({'data': data})
 
     async def api_one(self, request: Request):
