@@ -6,18 +6,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from starlette.templating import Jinja2Templates
-from tortoise import Model as BaseModel
 from tortoise.contrib.starlette import register_tortoise
+from tortoise_api_model import Model
 
 from tortoise_api.util import jsonify
-
-
-class Model(BaseModel):
-    _name: str = 'name'
-    def repr(self):
-        if self._name in self._meta.db_fields:
-            return getattr(self, self._name)
-        return self.__repr__()
 
 
 class Api:

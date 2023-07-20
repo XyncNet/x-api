@@ -1,6 +1,6 @@
 from tortoise import fields
 
-from tortoise_api import Model
+from tortoise_api_model import Model
 
 
 class User(Model):

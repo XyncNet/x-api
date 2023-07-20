@@ -1,1 +1,1 @@
-from .api import Api, Model
+from .api import Api

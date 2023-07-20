@@ -7,14 +7,15 @@ authors = [
 keywords = ["starlette", "fastapi", "admin", "dashboard", "datatables", "crud", "tortoise-orm", "ASGI-admin"]
 description = "Simplest fastest minimal REST API CRUD generator for Tortoise ORM models"
 readme = "README.md"
-license = {file = "LICENSE"}
+license = {text = "MIT"}
 dependencies = [
     "python-dotenv",
     "starlette",
+    "tortoise-api-model",
     "tortoise-orm[asyncpg]",
     "uvicorn"
 ]
-version = "0.0.7"
+version = "0.0.8"
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"
