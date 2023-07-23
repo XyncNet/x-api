@@ -4,7 +4,7 @@ requires-python = ">=3.9"
 authors = [
     {name = "Artemiev", email = "mixartemev@gmail.com"},
 ]
-keywords = ["starlette", "fastapi", "admin", "dashboard", "datatables", "crud", "tortoise-orm", "ASGI-admin"]
+keywords = ["starlette", "fastapi", "admin", "generator", "db-model", "crud", "tortoise-orm", "ASGI-admin"]
 description = "Simplest fastest minimal REST API CRUD generator for Tortoise ORM models"
 readme = "README.md"
 license = {text = "MIT"}
@@ -15,7 +15,7 @@ dependencies = [
     "tortoise-api-model",
     "uvicorn"
 ]
-version = "0.1.1"
+version = "0.2.0"
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"

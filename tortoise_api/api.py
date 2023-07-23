@@ -9,7 +9,7 @@ from starlette.templating import Jinja2Templates
 from tortoise.contrib.starlette import register_tortoise
 from tortoise_api_model import Model
 
-from tortoise_api.util import jsonify
+from tortoise_api.util import jsonify, upsert, update, delete
 
 
 class Api:
@@ -28,9 +28,9 @@ class Api:
         """
         self.templates = Jinja2Templates("templates")
         self.routes: [Route] = [
-            Route('/{model}/{oid}', self.api_one, methods=['GET', 'POST']),
+            Route('/{model}/{oid}', self.one_update, methods=['GET', 'POST', 'DELETE']),
             Route('/favicon.ico', lambda req: Response(), methods=['GET']),  # avoid chrome auto favicon load
-            Route('/{model}', self.api_all, methods=['GET', 'POST']),
+            Route('/{model}', self.all_create, methods=['GET', 'POST']),
             Route('/', self.api_menu, methods=['GET']),
         ]
         self.debug = debug
@@ -48,19 +48,29 @@ class Api:
     async def api_menu(self, _: Request):
         return JSONResponse(list(self.models))
 
-    async def api_all(self, request: Request):
-        model: Model = self._get_model(request)
+    async def all_create(self, request: Request):
+        model: type[Model] = self._get_model(request)
+        if request.method == 'POST':
+            res = await upsert(model, await request.json())
+            return JSONResponse(jsonify(res[0]), status_code={True: 201, False: 202}[res[1]]) # create
         objects: [Model] = await model.all().prefetch_related(*model._meta.fetch_fields)
         data = [jsonify(obj) for obj in objects]
-        return JSONResponse({'data': data})
+        return JSONResponse({'data': data}) # show all
 
-    async def api_one(self, request: Request):
-        model: Model = self._get_model(request)
-        obj = await self._get_model(request).get(id=request.path_params['oid']).prefetch_related(*model._meta.fetch_fields)
-        return JSONResponse(jsonify(obj))
+    async def one_update(self, request: Request):
+        model: type[Model] = self._get_model(request)
+        oid = request.path_params['oid']
+        if request.method == 'POST':
+            res = await update(model, await request.json(), oid)
+            return JSONResponse(jsonify(res[0]), status_code=202) # update
+        elif request.method == 'DELETE':
+            res = await delete(model, oid)
+            return JSONResponse(jsonify(res[0]), status_code=202) # update
+        obj = await model.get(id=oid).prefetch_related(*model._meta.fetch_fields)
+        return JSONResponse(jsonify(obj)) # show one
 
 
     # UTILS
-    def _get_model(self, request: Request) -> type(Model):
+    def _get_model(self, request: Request) -> type[Model]:
         model_id: str = request.path_params['model']
         return self.models.get(model_id)
