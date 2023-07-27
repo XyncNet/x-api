@@ -1,5 +1,0 @@
-python-dotenv
-starlette
-tortoise-api-model
-tortoise-orm[asyncpg]
-uvicorn

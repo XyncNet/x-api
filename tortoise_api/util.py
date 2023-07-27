@@ -1,8 +1,10 @@
 from datetime import date
+from urllib.parse import parse_qsl, unquote
+
 from tortoise.fields import Field
 from tortoise.fields.relational import RelationalField, ReverseRelation
-from tortoise.models import MetaInfo
 from tortoise_api_model import Model
+
 
 def jsonify(obj: Model) -> dict:
     def check(field: Field, key: str):
@@ -25,15 +27,27 @@ def jsonify(obj: Model) -> dict:
 
     return {key: check(field, key) for key, field in obj._meta.fields_map.items() if not key.endswith('_id')}
 
-async def upsert(model: type[Model], dct: dict):
-    meta: MetaInfo = model._meta
-    # if pk := meta.pk_attr in dct.keys():
-    #     unq = {pk: dct.pop(pk)}
-    # else:
-    unq = {key: dct.pop(key) for key, ft in meta.fields_map.items() if ft.unique and key in dct.keys()}
-    # unq = meta.unique_together
-    res = await model.update_or_create(dct, **unq)
-    return res
+def parse_qs(s: str) -> dict:
+    data = {}
+    for k, v in parse_qsl(unquote(s)):
+        if k in data:
+            if isinstance(data[k], tuple):
+                data[k] += (v,)
+            else:
+                data[k] = data[k], v
+        else:
+            data[k] = v
+    return data
+
+# async def upsert(model: type[Model], dct: dict):
+#     meta: MetaInfo = model._meta
+#     if pk := meta.pk_attr in dct.keys():
+#         unq = {pk: dct.pop(pk)}
+#     else:
+#         unq = {key: dct.pop(key) for key, ft in meta.fields_map.items() if ft.unique and key in dct.keys()}
+#     # unq = meta.unique_together
+#     res = await model.update_or_create(dct, **unq)
+#     return res
 
 async def update(model: type[Model], dct: dict, oid):
     return await model.update_or_create(dct, **{model._meta.pk_attr: oid})

@@ -3,13 +3,13 @@ from os import getenv as env
 from dotenv import load_dotenv
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, Response, RedirectResponse
 from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 from tortoise.contrib.starlette import register_tortoise
 from tortoise_api_model import Model
 
-from tortoise_api.util import jsonify, upsert, update, delete
+from tortoise_api.util import jsonify, update, delete, parse_qs
 
 
 class Api:
@@ -51,8 +51,9 @@ class Api:
     async def all_create(self, request: Request):
         model: type[Model] = self._get_model(request)
         if request.method == 'POST':
-            res = await upsert(model, await request.json())
-            return JSONResponse(jsonify(res[0]), status_code={True: 201, False: 202}[res[1]]) # create
+            data = parse_qs(await request.body())
+            await model.create(**data)
+            return RedirectResponse('/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         objects: [Model] = await model.all().prefetch_related(*model._meta.fetch_fields)
         data = [jsonify(obj) for obj in objects]
         return JSONResponse({'data': data}) # show all
