@@ -12,10 +12,10 @@ dependencies = [
     "asyncpg",
     "python-dotenv",
     "starlette",
-    "tortoise-api-model>=0.0.4",
+    "tortoise-api-model>=0.0.5",
     "uvicorn"
 ]
-version = "0.2.1"
+version = "0.2.2"
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"
