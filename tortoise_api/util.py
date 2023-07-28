@@ -1,7 +1,7 @@
 from datetime import date
 from urllib.parse import parse_qsl, unquote
 
-from asyncpg import Polygon
+from asyncpg import Polygon, Range
 from tortoise.fields import Field
 from tortoise.fields.relational import RelationalField, ReverseRelation
 from tortoise_api_model import Model
@@ -17,6 +17,8 @@ def jsonify(obj: Model) -> dict:
             return prop.__str__().split('+')[0].split('.')[0] # '+' separates tz part, '.' separates millisecond part
         if isinstance(prop, Polygon):
             return prop.points
+        if isinstance(prop, Range):
+            return prop.lower, prop.upper
         elif isinstance(field, RelationalField):
             if isinstance(prop, Model):
                 return rel_pack(prop)
@@ -38,7 +40,7 @@ def parse_qs(s: str) -> dict:
             if isinstance(data[k], tuple):
                 data[k] += (v,)
             else:
-                data[k] = data[k], v
+                data[k] = data[k], float(v)
         # for list-like fields(2d lists: (1d list of 1d tuples)): '.'-separated param names splits to {key}.{index}
         elif '.' in k:
             bk, i = k.split('.')
@@ -48,8 +50,8 @@ def parse_qs(s: str) -> dict:
                 data[bk][i] += (v,)
             else:
                 data[bk].append((v,))
-        else:
-            data[k] = v
+        else: # if v is IntEnum - it requires explicit convert to int
+            data[k] = int(v) if v.isnumeric() else v
     return data
 
 # async def upsert(model: type[Model], dct: dict):
