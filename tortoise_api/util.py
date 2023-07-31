@@ -36,20 +36,29 @@ def parse_qs(s: str) -> dict:
     data = {}
     for k, v in parse_qsl(unquote(s)):
         # for collection-like fields (1d tuples): multiple the same name params merges to tuple
-        if k in data:
-            if isinstance(data[k], tuple):
-                data[k] += (v,)
+        if k.endswith('[]'):
+            k = k[:-2]
+            # for list-like fields(2d lists: (1d list of 1d tuples)): '.'-separated param names splits to {key}.{index}
+            if '.' in k:
+                k, i = k.split('.')
+                i = int(i)
+                data[k] = data.get(k, [()])
+                if len(data[k]) > i:
+                    data[k][i] += (v,)
+                else:
+                    data[k].append((v,))
             else:
-                data[k] = data[k], float(v)
-        # for list-like fields(2d lists: (1d list of 1d tuples)): '.'-separated param names splits to {key}.{index}
-        elif '.' in k:
-            bk, i = k.split('.')
-            i = int(i)
-            data[bk] = data.get(bk, [()])
-            if len(data[bk]) > i:
-                data[bk][i] += (v,)
-            else:
-                data[bk].append((v,))
+                data[k] = data.get(k, ()) + (v,)
+        # todo: make list with no collections ablility
+        # elif '.' in k:
+        #     k, i = k.split('.')
+        #     i = int(i)
+        #     data[k] = data.get(k, [()])
+        #     if len(data[k]) > i:
+        #         data[k][i] += (v,)
+        #     else:
+        #         data[k].append((v,))
+
         else: # if v is IntEnum - it requires explicit convert to int
             data[k] = int(v) if v.isnumeric() else v
     return data

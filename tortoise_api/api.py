@@ -7,6 +7,7 @@ from starlette.responses import JSONResponse, Response, RedirectResponse
 from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 from tortoise.contrib.starlette import register_tortoise
+from tortoise.fields import ManyToManyRelation
 from tortoise_api_model import Model
 
 from tortoise_api.util import jsonify, update, delete, parse_qs
@@ -52,7 +53,12 @@ class Api:
         model: type[Model] = self._get_model(request)
         if request.method == 'POST':
             data = parse_qs(await request.body())
-            await model.create(**data)
+            m2ms = {k: data.pop(k) for k in model._meta.m2m_fields}
+            obj: Model = await model.create(**data)
+            for k, ids in m2ms.items():
+                m2m_rel: ManyToManyRelation = getattr(obj, k)
+                items = [await m2m_rel.remote_model[i] for i in ids]
+                await m2m_rel.add(*items)
             return RedirectResponse('/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         objects: [Model] = await model.all().prefetch_related(*model._meta.fetch_fields)
         data = [jsonify(obj) for obj in objects]
