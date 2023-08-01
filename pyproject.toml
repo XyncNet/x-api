@@ -15,7 +15,7 @@ dependencies = [
     "tortoise-api-model>=0.1.0",
     "uvicorn"
 ]
-version = "0.2.4"
+version = "0.2.5"
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"

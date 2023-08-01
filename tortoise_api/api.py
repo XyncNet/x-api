@@ -53,7 +53,7 @@ class Api:
         model: type[Model] = self._get_model(request)
         if request.method == 'POST':
             data = parse_qs(await request.body())
-            m2ms = {k: data.pop(k) for k in model._meta.m2m_fields}
+            m2ms = {k: data.pop(k) for k in model._meta.m2m_fields if k in data}
             obj: Model = await model.create(**data)
             for k, ids in m2ms.items():
                 m2m_rel: ManyToManyRelation = getattr(obj, k)
