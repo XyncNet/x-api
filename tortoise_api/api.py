@@ -9,7 +9,7 @@ from starlette.templating import Jinja2Templates
 from tortoise.contrib.starlette import register_tortoise
 from tortoise_api_model import Model
 
-from tortoise_api.util import jsonify, update, delete, parse_qs, upsert
+from tortoise_api.util import jsonify, delete, parse_qs
 
 
 class Api:
@@ -52,7 +52,7 @@ class Api:
         model: type[Model] = self._get_model(request)
         if request.method == 'POST':
             data = parse_qs(await request.body())
-            obj: Model = await upsert(model, data)
+            obj: Model = await model.upsert(data)
             return RedirectResponse('/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         objects: [Model] = await model.all().prefetch_related(*model._meta.fetch_fields)
         data = [jsonify(obj) for obj in objects]
@@ -63,7 +63,7 @@ class Api:
         oid = request.path_params['oid']
         if request.method == 'POST':
             data = parse_qs(await request.body())
-            res = await upsert(model, {model._meta.pk_attr: oid, **data})
+            res = await model.upsert({model._meta.pk_attr: oid, **data})
             # return JSONResponse(jsonify(res[0]), status_code=202) # update
             return RedirectResponse('/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         elif request.method == 'DELETE':

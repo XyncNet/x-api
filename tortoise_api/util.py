@@ -10,7 +10,7 @@ from tortoise_api_model import Model
 def jsonify(obj: Model) -> dict:
     def check(field: Field, key: str):
         def rel_pack(mod: Model) -> dict:
-            return {mod.pk_attr: mod.pk, 'type': mod.__class__.__name__, 'repr': mod.repr()}
+            return {mod._meta.pk_attr: mod.pk, 'type': mod.__class__.__name__, 'repr': mod.repr()}
 
         prop = getattr(obj, key)
         if isinstance(prop, date):
