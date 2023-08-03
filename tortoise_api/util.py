@@ -3,16 +3,14 @@ from urllib.parse import parse_qsl, unquote
 
 from asyncpg import Polygon, Range
 from tortoise.fields import Field
-from tortoise.fields.relational import RelationalField, ReverseRelation, ManyToManyRelation
-from tortoise.models import MetaInfo
-from tortoise.queryset import QuerySet
+from tortoise.fields.relational import RelationalField, ReverseRelation
 from tortoise_api_model import Model
 
 
 def jsonify(obj: Model) -> dict:
     def check(field: Field, key: str):
         def rel_pack(mod: Model) -> dict:
-            return {'id': mod.id, 'type': mod.__class__.__name__, 'repr': mod.repr()}
+            return {mod.pk_attr: mod.pk, 'type': mod.__class__.__name__, 'repr': mod.repr()}
 
         prop = getattr(obj, key)
         if isinstance(prop, date):
@@ -64,38 +62,6 @@ def parse_qs(s: str) -> dict:
         else: # if v is IntEnum - it requires explicit convert to int
             data[k] = int(v) if v.isnumeric() else v
     return data
-
-async def upsert(model: type[Model], data: dict):
-    meta: MetaInfo = model._meta
-
-    # pop fields for relations from general data dict
-    m2ms = {k: data.pop(k) for k in model._meta.m2m_fields if k in data}
-    bfks = {k: data.pop(k) for k in model._meta.backward_fk_fields if k in data}
-    bo2os = {k: data.pop(k) for k in model._meta.backward_o2o_fields if k in data}
-
-    # save general model
-    if pk := meta.pk_attr in data.keys():
-        unq = {pk: data.pop(pk)}
-    else:
-        unq = {key: data.pop(key) for key, ft in meta.fields_map.items() if ft.unique and key in data.keys()}
-    # unq = meta.unique_together
-    obj, is_created = await model.update_or_create(data, **unq)
-
-    # save relations
-    for k, ids in m2ms.items():
-        m2m_rel: ManyToManyRelation = getattr(obj, k)
-        items = [await m2m_rel.remote_model[i] for i in ids]
-        await m2m_rel.add(*items)
-    for k, ids in bfks.items():
-        bfk_rel: ReverseRelation = getattr(obj, k)
-        items = [await bfk_rel.remote_model[i] for i in ids]
-        [await item.update_from_dict({bfk_rel.relation_field: obj.pk}).save() for item in items]
-    for k, oid in bo2os.items():
-        bo2o_rel: QuerySet = getattr(obj, k)
-        item = await bo2o_rel.model[oid]
-        await item.update_from_dict({obj._meta.db_table: obj}).save()
-
-    return obj
 
 async def update(model: type[Model], dct: dict, oid):
     return await model.update_or_create(dct, **{model._meta.pk_attr: oid})

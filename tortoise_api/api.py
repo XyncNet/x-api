@@ -7,8 +7,6 @@ from starlette.responses import JSONResponse, Response, RedirectResponse
 from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 from tortoise.contrib.starlette import register_tortoise
-from tortoise.fields import ManyToManyRelation, ReverseRelation
-from tortoise.queryset import QuerySet
 from tortoise_api_model import Model
 
 from tortoise_api.util import jsonify, update, delete, parse_qs, upsert
