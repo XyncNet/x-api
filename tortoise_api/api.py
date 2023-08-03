@@ -7,10 +7,11 @@ from starlette.responses import JSONResponse, Response, RedirectResponse
 from starlette.routing import Route
 from starlette.templating import Jinja2Templates
 from tortoise.contrib.starlette import register_tortoise
-from tortoise.fields import ManyToManyRelation
+from tortoise.fields import ManyToManyRelation, ReverseRelation
+from tortoise.queryset import QuerySet
 from tortoise_api_model import Model
 
-from tortoise_api.util import jsonify, update, delete, parse_qs
+from tortoise_api.util import jsonify, update, delete, parse_qs, upsert
 
 
 class Api:
@@ -37,7 +38,7 @@ class Api:
         self.debug = debug
 
     def start(self, models_module):
-        self.models = {key: model for key in dir(models_module) if isinstance(model := getattr(models_module, key), type(Model)) and model.mro()[1]==Model}
+        self.models: {str: type[Model]} = {key: model for key in dir(models_module) if isinstance(model := getattr(models_module, key), type(Model)) and model.mro()[1]==Model}
         if self.debug:
             logging.basicConfig(level=logging.DEBUG)
         self.app = Starlette(debug=self.debug, routes=self.routes)
@@ -53,12 +54,7 @@ class Api:
         model: type[Model] = self._get_model(request)
         if request.method == 'POST':
             data = parse_qs(await request.body())
-            m2ms = {k: data.pop(k) for k in model._meta.m2m_fields if k in data}
-            obj: Model = await model.create(**data)
-            for k, ids in m2ms.items():
-                m2m_rel: ManyToManyRelation = getattr(obj, k)
-                items = [await m2m_rel.remote_model[i] for i in ids]
-                await m2m_rel.add(*items)
+            obj: Model = await upsert(model, data)
             return RedirectResponse('/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         objects: [Model] = await model.all().prefetch_related(*model._meta.fetch_fields)
         data = [jsonify(obj) for obj in objects]
@@ -68,8 +64,10 @@ class Api:
         model: type[Model] = self._get_model(request)
         oid = request.path_params['oid']
         if request.method == 'POST':
-            res = await update(model, await request.json(), oid)
-            return JSONResponse(jsonify(res[0]), status_code=202) # update
+            data = parse_qs(await request.body())
+            res = await upsert(model, {model._meta.pk_attr: oid, **data})
+            # return JSONResponse(jsonify(res[0]), status_code=202) # update
+            return RedirectResponse('/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         elif request.method == 'DELETE':
             res = await delete(model, oid)
             return JSONResponse(jsonify(res[0]), status_code=202) # update
