@@ -13,13 +13,15 @@ def jsonify(obj: Model) -> dict:
             return {mod._meta.pk_attr: mod.pk, 'type': mod.__class__.__name__, 'repr': mod.repr()}
 
         prop = getattr(obj, key)
+        if obj._meta.pk_attr == key:
+            return f'<a href="/{obj._meta._model.__name__}/{getattr(obj, key)}">{getattr(obj, key)}</a>'
         if isinstance(prop, date):
             return prop.__str__().split('+')[0].split('.')[0] # '+' separates tz part, '.' separates millisecond part
         if isinstance(prop, Polygon):
             return prop.points
         if isinstance(prop, Range):
             return prop.lower, prop.upper
-        elif isinstance(field, RelationalField):
+        if isinstance(field, RelationalField):
             if isinstance(prop, Model):
                 return rel_pack(prop)
             elif isinstance(prop, ReverseRelation) and isinstance(prop.related_objects, list):
@@ -27,8 +29,7 @@ def jsonify(obj: Model) -> dict:
             elif prop is None:
                 return ''
             return None
-        else:
-            return getattr(obj, key)
+        return getattr(obj, key)
 
     return {key: check(field, key) for key, field in obj._meta.fields_map.items() if not key.endswith('_id')}
 
