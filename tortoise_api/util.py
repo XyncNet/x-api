@@ -14,7 +14,7 @@ def jsonify(obj: Model) -> dict:
 
         prop = getattr(obj, key)
         if obj._meta.pk_attr == key:
-            return f'<a href="/{obj._meta._model.__name__}/{getattr(obj, key)}">{getattr(obj, key)}</a>'
+            return f'<a href="/edit/{obj._meta._model.__name__}/{getattr(obj, key)}">{getattr(obj, key)}</a>'
         if isinstance(prop, date):
             return prop.__str__().split('+')[0].split('.')[0] # '+' separates tz part, '.' separates millisecond part
         if isinstance(prop, Polygon):

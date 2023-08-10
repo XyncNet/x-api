@@ -53,7 +53,7 @@ class Api:
         if request.method == 'POST':
             data = parse_qs(await request.body())
             obj: Model = await model.upsert(data)
-            return RedirectResponse('/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
+            return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         objects: [Model] = await model.all().prefetch_related(*model._meta.fetch_fields)
         data = [jsonify(obj) for obj in objects]
         return JSONResponse({'data': data}) # show all
@@ -63,9 +63,9 @@ class Api:
         oid = request.path_params['oid']
         if request.method == 'POST':
             data = parse_qs(await request.body())
-            res = await model.upsert({model._meta.pk_attr: oid, **data})
+            res = await model.upsert(data, oid)
             # return JSONResponse(jsonify(res[0]), status_code=202) # update
-            return RedirectResponse('/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
+            return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         elif request.method == 'DELETE':
             res = await delete(model, oid)
             return JSONResponse(jsonify(res[0]), status_code=202) # update
