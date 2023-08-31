@@ -5,11 +5,19 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, RedirectResponse
 from starlette.routing import Route
+from starlette.schemas import SchemaGenerator
 from starlette.templating import Jinja2Templates
 from tortoise.contrib.starlette import register_tortoise
 from tortoise_api_model import Model
 
 from tortoise_api.util import jsonify, delete, parse_qs
+
+schemas = SchemaGenerator(
+    {"openapi": "3.0.0", "info": {"title": "Example API", "version": "1.0"}}
+)
+
+def openapi_schema(request: Request):
+    return schemas.OpenAPIResponse(request=request)
 
 
 class Api:
@@ -30,6 +38,7 @@ class Api:
         self.routes: [Route] = [
             Route('/{model}/{oid}', self.one_update, methods=['GET', 'POST', 'DELETE']),
             Route('/favicon.ico', lambda req: Response(), methods=['GET']),  # avoid chrome auto favicon load
+            Route("/schema", endpoint=openapi_schema, include_in_schema=False),
             Route('/{model}', self.all_create, methods=['GET', 'POST']),
             Route('/', self.api_menu, methods=['GET']),
         ]
@@ -67,8 +76,8 @@ class Api:
             # return JSONResponse(jsonify(res[0]), status_code=202) # update
             return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         elif request.method == 'DELETE':
-            res = await delete(model, oid)
-            return JSONResponse(jsonify(res[0]), status_code=202) # update
+            await delete(model, oid)
+            return JSONResponse({}, status_code=202) # delete
         obj = await model.get(id=oid).prefetch_related(*model._meta.fetch_fields)
         return JSONResponse(jsonify(obj)) # show one
 

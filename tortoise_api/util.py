@@ -50,7 +50,7 @@ def parse_qs(s: str) -> dict:
                     data[k].append((v,))
             else:
                 data[k] = data.get(k, ()) + (v,)
-        # todo: make list with no collections ablility
+        # todo: make list with no collections ability
         # elif '.' in k:
         #     k, i = k.split('.')
         #     i = int(i)
