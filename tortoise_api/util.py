@@ -13,8 +13,7 @@ async def jsonify(obj: Model) -> dict:
             return {mod._meta.pk_attr: mod.pk, 'type': mod.__class__.__name__, 'repr': await mod.repr()}
 
         prop = getattr(obj, key)
-        # if obj._meta.pk_attr == key:
-        #     return f'<a href="/edit/{obj._meta._model.__name__}/{getattr(obj, key)}">{getattr(obj, key)}</a>'
+
         if isinstance(prop, date):
             return prop.__str__().split('+')[0].split('.')[0] # '+' separates tz part, '.' separates millisecond part
         if isinstance(prop, Polygon):
@@ -35,9 +34,9 @@ async def jsonify(obj: Model) -> dict:
 
 def parse_qs(s: str) -> dict:
     data = {}
-    for k, v in parse_qsl(s):
+    for k, v in parse_qsl(s.decode()):
         # for collection-like fields (1d tuples): multiple the same name params merges to tuple
-        k, v = k.decode(), unquote(v)
+        k, v = k, unquote(v)
         if k.endswith('[]'):
             k = k[:-2]
             # for list-like fields(2d lists: (1d list of 1d tuples)): '.'-separated param names splits to {key}.{index}
