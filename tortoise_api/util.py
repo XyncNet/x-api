@@ -7,10 +7,10 @@ from tortoise.fields.relational import RelationalField, ReverseRelation
 from tortoise_api_model import Model
 
 
-def jsonify(obj: Model) -> dict:
-    def check(field: Field, key: str):
-        def rel_pack(mod: Model) -> dict:
-            return {mod._meta.pk_attr: mod.pk, 'type': mod.__class__.__name__, 'repr': mod.repr()}
+async def jsonify(obj: Model) -> dict:
+    async def check(field: Field, key: str):
+        async def rel_pack(mod: Model) -> dict:
+            return {mod._meta.pk_attr: mod.pk, 'type': mod.__class__.__name__, 'repr': await mod.repr()}
 
         prop = getattr(obj, key)
         # if obj._meta.pk_attr == key:
@@ -23,20 +23,21 @@ def jsonify(obj: Model) -> dict:
             return prop.lower, prop.upper
         if isinstance(field, RelationalField):
             if isinstance(prop, Model):
-                return rel_pack(prop)
+                return await rel_pack(prop)
             elif isinstance(prop, ReverseRelation) and isinstance(prop.related_objects, list):
-                return [rel_pack(d) for d in prop.related_objects]
+                return [await rel_pack(d) for d in prop.related_objects]
             elif prop is None:
                 return ''
             return None
         return getattr(obj, key)
 
-    return {key: check(field, key) for key, field in obj._meta.fields_map.items() if not key.endswith('_id')}
+    return {key: await check(field, key) for key, field in obj._meta.fields_map.items() if not key.endswith('_id')}
 
 def parse_qs(s: str) -> dict:
     data = {}
-    for k, v in parse_qsl(unquote(s)):
+    for k, v in parse_qsl(s):
         # for collection-like fields (1d tuples): multiple the same name params merges to tuple
+        k, v = k.decode(), unquote(v)
         if k.endswith('[]'):
             k = k[:-2]
             # for list-like fields(2d lists: (1d list of 1d tuples)): '.'-separated param names splits to {key}.{index}

@@ -64,7 +64,7 @@ class Api:
             obj: Model = await model.upsert(data)
             return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         objects: [Model] = await model.all().prefetch_related(*model._meta.fetch_fields)
-        data = [jsonify(obj) for obj in objects]
+        data = [await jsonify(obj) for obj in objects]
         return JSONResponse({'data': data}) # show all
 
     async def one_update(self, request: Request):
@@ -73,13 +73,13 @@ class Api:
         if request.method == 'POST':
             data = parse_qs(await request.body())
             res = await model.upsert(data, oid)
-            # return JSONResponse(jsonify(res[0]), status_code=202) # update
+            # return JSONResponse(await jsonify(res[0]), status_code=202) # update
             return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
         elif request.method == 'DELETE':
             await delete(model, oid)
             return JSONResponse({}, status_code=202) # delete
         obj = await model.get(id=oid).prefetch_related(*model._meta.fetch_fields)
-        return JSONResponse(jsonify(obj)) # show one
+        return JSONResponse(await jsonify(obj)) # show one
 
 
     # UTILS
