@@ -45,7 +45,7 @@ class Api:
         self.debug = debug
 
     def start(self, models_module):
-        self.models: {str: type[Model]} = {key: model for key in dir(models_module) if isinstance(model := getattr(models_module, key), type(Model)) and model.mro()[1]==Model}
+        self.models: {str: type[Model]} = {key: model for key in dir(models_module) if isinstance(model := getattr(models_module, key), type(Model)) and Model in model.mro()}
         if self.debug:
             logging.basicConfig(level=logging.DEBUG)
         self.app = Starlette(debug=self.debug, routes=self.routes)
