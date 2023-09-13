@@ -1,12 +1,7 @@
 from tortoise import fields
-
 from tortoise_api_model import Model
+from tortoise_api_model.model import User
 
-
-class User(Model):
-    id: int = fields.IntField(pk=True)
-    name: str = fields.CharField(255, unique=True, null=False)
-    posts: fields.ReverseRelation["Post"]
 
 class Post(Model):
     id: int = fields.IntField(pk=True)

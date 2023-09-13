@@ -1,5 +1,8 @@
 python-dotenv
-starlette
+fastapi
 tortoise-api-model
 tortoise-orm[asyncpg]
 uvicorn
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
