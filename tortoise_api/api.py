@@ -1,10 +1,11 @@
 import logging
 from os import getenv as env
+from types import ModuleType
 from typing import Annotated
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends
-from fastapi.routing import APIRoute
+from fastapi.routing import APIRoute, APIRouter
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, JSONResponse
 from tortoise.contrib.starlette import register_tortoise
@@ -20,6 +21,7 @@ class Api:
 
     def __init__(
         self,
+        models_module: ModuleType,
         debug: bool = False,
         # auth_provider: AuthProvider = None, # todo: add auth
     ):
@@ -28,7 +30,7 @@ class Api:
             debug: Debug SQL queries, api requests
             # auth_provider: Authentication Provider
         """
-        self.routes: [APIRoute] = [
+        api_routes: [APIRoute] = [
             APIRoute('/', self.api_menu),
             APIRoute('/model/{model}', self.all, methods=['GET']),
             APIRoute('/model/User', reg_user, methods=['POST']),
@@ -36,18 +38,16 @@ class Api:
             APIRoute('/{model}/{oid}', self.one_get, methods=['GET']),
             APIRoute('/{model}/{oid}', self.one_update, methods=['POST']),
             APIRoute('/{model}/{oid}', self.one_delete, methods=['DELETE']),
-            APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token),
         ]
-        self.debug = debug
-
-    def start(self, models_module):
         self.models: {str: type[Model]} = {key: model for key in dir(models_module) if isinstance(model := getattr(models_module, key), type(Model)) and Model in model.mro()}
-        if self.debug:
+        if debug:
             logging.basicConfig(level=logging.DEBUG)
-        self.app = FastAPI(debug=self.debug, routes=self.routes)
+        token_route = APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth'])
+        self.app = FastAPI(debug=debug, routes=[token_route])
+        api_router = APIRouter(routes=api_routes)
+        self.app.include_router(api_router, prefix='/api', tags=["api"], dependencies=[Depends(get_current_user)])
         load_dotenv()
-        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [models_module]}, generate_schemas=self.debug)
-        return self.app
+        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [models_module]}, generate_schemas=debug)
 
 
     # ROUTES
