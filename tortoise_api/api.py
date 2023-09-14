@@ -30,22 +30,36 @@ class Api:
             debug: Debug SQL queries, api requests
             # auth_provider: Authentication Provider
         """
-        api_routes: [APIRoute] = [
+        if debug:
+            logging.basicConfig(level=logging.DEBUG)
+
+        # extract models from module
+        models: {Model.__class__: [Model.__class__]} = {model: model.mro() for key in dir(models_module) if isinstance(model := getattr(models_module, key), Model.__class__) and model==model.mro()[0]}
+        # collect parents models for hiding
+        to_hide: set[Model.__class__] = set()
+        [to_hide.update(m[1:]) for m in models.values()]
+        # set global only top models list
+        self.models: {str: Model.__class__} = {m.__name__: m for m in set(models.keys()) - to_hide}
+
+        # get auth token route
+        auth_routes = [
+            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='Sign on'),
+            APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
+        ]
+
+        # main app
+        self.app = FastAPI(debug=debug, routes=auth_routes)
+        # api routes
+        api_router = APIRouter(routes=[
             APIRoute('/', self.api_menu),
-            APIRoute('/model/{model}', self.all, methods=['GET']),
-            APIRoute('/model/User', reg_user, methods=['POST']),
-            APIRoute('/model/{model}', self.create, methods=['POST']),
+            APIRoute('/{model}', self.all, methods=['GET']),
+            APIRoute('/{model}', self.create, methods=['POST']),
             APIRoute('/{model}/{oid}', self.one_get, methods=['GET']),
             APIRoute('/{model}/{oid}', self.one_update, methods=['POST']),
             APIRoute('/{model}/{oid}', self.one_delete, methods=['DELETE']),
-        ]
-        self.models: {str: type[Model]} = {key: model for key in dir(models_module) if isinstance(model := getattr(models_module, key), type(Model)) and Model in model.mro()}
-        if debug:
-            logging.basicConfig(level=logging.DEBUG)
-        token_route = APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth'])
-        self.app = FastAPI(debug=debug, routes=[token_route])
-        api_router = APIRouter(routes=api_routes)
+        ])
         self.app.include_router(api_router, prefix='/api', tags=["api"], dependencies=[Depends(get_current_user)])
+        # db init
         load_dotenv()
         register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [models_module]}, generate_schemas=debug)
 
