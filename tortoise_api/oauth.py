@@ -22,7 +22,7 @@ class TokenData(BaseModel):
     username: str | None = None
     scopes: list[str] = []
 
-class PydUser(BaseModel):
+class NewUser(BaseModel):
     username: str
     password: str
     email: str | None = None
@@ -37,14 +37,14 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 
-async def reg_user(new_user: PydUser):
+async def reg_user(new_user: NewUser):
     new_user.password = cc.hash(new_user.password)
     if await User.create(**new_user.model_dump()):
         return new_user
 
-async def authenticate_user(username: str, password: str) -> PydUser | bool:
+async def authenticate_user(username: str, password: str) -> NewUser | bool:
     if user := await User.get_or_none(username=username):
-        pyd_user = PydUser.model_validate(user, from_attributes=True)
+        pyd_user = NewUser.model_validate(user, from_attributes=True)
         if cc.verify(password, user.password):
             return pyd_user
     return False
@@ -100,7 +100,7 @@ async def get_current_active_user(current_user: Annotated[User, Security(get_cur
 
 
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Annotated[dict, Token]:
-    user: PydUser = await authenticate_user(form_data.username, form_data.password)
+    user: NewUser = await authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect username or password")
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
