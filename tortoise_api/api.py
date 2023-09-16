@@ -25,6 +25,7 @@ class Api:
         self,
         models_module: ModuleType,
         debug: bool = False,
+        title: str = 'FemtoAPI',
         # auth_provider: AuthProvider = None, # todo: add auth
     ):
         """
@@ -50,7 +51,7 @@ class Api:
         ]
 
         # main app
-        self.app = FastAPI(debug=debug, routes=auth_routes)
+        self.app = FastAPI(debug=debug, routes=auth_routes, title=title)
         # api routes
         api_router = APIRouter(routes=[
             APIRoute('/', self.api_menu),
