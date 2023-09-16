@@ -11,6 +11,8 @@ from starlette.responses import RedirectResponse, JSONResponse
 from tortoise.contrib.starlette import register_tortoise
 
 from tortoise_api_model import Model
+
+from tortoise_api import oauth
 from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user
 from tortoise_api.util import jsonify, delete, parse_qs
 
@@ -40,10 +42,10 @@ class Api:
         [to_hide.update(m[1:]) for m in models.values()]
         # set global only top models list
         self.models: {str: Model.__class__} = {m.__name__: m for m in set(models.keys()) - to_hide}
-
+        oauth.user_model = self.models.get('User')
         # get auth token route
         auth_routes = [
-            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='Sign on'),
+            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp'),
             APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
         ]
 

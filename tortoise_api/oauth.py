@@ -7,7 +7,7 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError
 from starlette import status
-from tortoise_api_model.model import User, UserStatus
+from tortoise_api_model.model import User, UserStatus, Model
 
 # to get a string like this run: openssl rand -hex 32
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
@@ -28,7 +28,7 @@ class NewUser(BaseModel):
     email: str | None = None
     phone: int | None = None
 
-
+user_model: Model.__class__ = User
 cc = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -39,11 +39,11 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 async def reg_user(new_user: NewUser):
     new_user.password = cc.hash(new_user.password)
-    if await User.create(**new_user.model_dump()):
+    if await user_model.create(**new_user.model_dump()):
         return new_user
 
 async def authenticate_user(username: str, password: str) -> NewUser | bool:
-    if user := await User.get_or_none(username=username):
+    if user := await user_model.get_or_none(username=username):
         pyd_user = NewUser.model_validate(user, from_attributes=True)
         if cc.verify(password, user.password):
             return pyd_user
@@ -61,7 +61,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return encoded_jwt
 
 
-async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str, Depends(oauth2_scheme)]) -> User:
+async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str, Depends(oauth2_scheme)]) -> user_model:
     if security_scopes.scopes:
         authenticate_value = f'Bearer scope="{security_scopes.scope_str}"'
     else:
@@ -80,7 +80,7 @@ async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str
         token_data = TokenData(scopes=token_scopes, username=username)
     except (JWTError, ValidationError):
         raise credentials_exception
-    user = await User.get_or_none(username=token_data.username)
+    user = await user_model.get_or_none(username=token_data.username)
     if user is None:
         raise credentials_exception
     for scope in security_scopes.scopes:
@@ -93,7 +93,7 @@ async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str
     return user
 
 
-async def get_current_active_user(current_user: Annotated[User, Security(get_current_user, scopes=["me"])]) -> User:
+async def get_current_active_user(current_user: Annotated[user_model, Security(get_current_user, scopes=["me"])]) -> user_model:
     if current_user.status == UserStatus.Inactive:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
