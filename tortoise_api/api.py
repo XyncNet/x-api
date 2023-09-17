@@ -5,16 +5,18 @@ from typing import Annotated
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends
+from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute, APIRouter
 from starlette.requests import Request
-from starlette.responses import RedirectResponse, JSONResponse
+from starlette.responses import JSONResponse
+from tortoise.contrib.pydantic import pydantic_model_creator
 from tortoise.contrib.starlette import register_tortoise
 
 from tortoise_api_model import Model
 
 from tortoise_api import oauth
 from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user
-from tortoise_api.util import jsonify, delete, parse_qs
+from tortoise_api.util import jsonify, delete
 
 
 class Api:
@@ -72,11 +74,12 @@ class Api:
         return JSONResponse(list(self.models))
 
 
-    async def create(self, request: Request, model: str):
+    async def create(self, data: dict, model: str):
         model: type[Model] = self.models.get(model)
-        data = parse_qs(await request.body())
         obj: Model = await model.upsert(data)
-        return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
+        jsn: dict = await jsonify(obj)
+        return ORJSONResponse(jsn, status_code=201) # create
+        # return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
 
     async def all(self, model: str, limit: int = 50, page: int = 1):
         model: type[Model] = self.models.get(model)
@@ -89,12 +92,12 @@ class Api:
         obj = await model.get(id=oid).prefetch_related(*model._meta.fetch_fields)
         return JSONResponse(await jsonify(obj)) # show one
 
-    async def one_update(self, request: Request, model: str, oid: int):
+    async def one_update(self, data: dict, model: str, oid: int):
         model: type[Model] = self.models.get(model)
-        data = parse_qs(await request.body())
-        res = await model.upsert(data, oid)
-        # return JSONResponse(await jsonify(res[0]), status_code=202) # update
-        return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
+        obj: Model = await model.upsert(data, oid)
+        jsn: dict = await jsonify(obj)
+        return ORJSONResponse(jsn, status_code=202) # update
+        # return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
 
     async def one_delete(self, request: Request, model: str, oid: int):
         model: type[Model] = self.models.get(model)

@@ -14,12 +14,12 @@ async def jsonify(obj: Model) -> dict:
 
         prop = getattr(obj, key)
 
-        if isinstance(prop, date):
-            return prop.__str__().split('+')[0].split('.')[0] # '+' separates tz part, '.' separates millisecond part
-        if isinstance(prop, Polygon):
-            return prop.points
-        if isinstance(prop, Range):
-            return prop.lower, prop.upper
+        # if isinstance(prop, date):
+        #     return prop.__str__().split('+')[0].split('.')[0] # '+' separates tz part, '.' separates millisecond part
+        # if isinstance(prop, Polygon):
+        #     return prop.points
+        # if isinstance(prop, Range):
+        #     return prop.lower, prop.upper
         if isinstance(field, RelationalField):
             if isinstance(prop, Model):
                 return await rel_pack(prop)
