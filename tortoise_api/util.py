@@ -32,38 +32,6 @@ async def jsonify(obj: Model) -> dict:
 
     return {key: await check(field, key) for key, field in obj._meta.fields_map.items() if not key.endswith('_id')}
 
-def parse_qs(s: str) -> dict:
-    data = {}
-    for k, v in parse_qsl(s.decode()):
-        # for collection-like fields (1d tuples): multiple the same name params merges to tuple
-        k, v = k, unquote(v)
-        if k.endswith('[]'):
-            k = k[:-2]
-            # for list-like fields(2d lists: (1d list of 1d tuples)): '.'-separated param names splits to {key}.{index}
-            if '.' in k:
-                k, i = k.split('.')
-                i = int(i)
-                data[k] = data.get(k, [()])
-                if len(data[k]) > i:
-                    data[k][i] += (v,)
-                else:
-                    data[k].append((v,))
-            else:
-                data[k] = data.get(k, ()) + (v,)
-        # todo: make list with no collections ability
-        # elif '.' in k:
-        #     k, i = k.split('.')
-        #     i = int(i)
-        #     data[k] = data.get(k, [()])
-        #     if len(data[k]) > i:
-        #         data[k][i] += (v,)
-        #     else:
-        #         data[k].append((v,))
-
-        else: # if v is IntEnum - it requires explicit convert to int
-            data[k] = int(v) if v.isnumeric() else v
-    return data
-
 async def update(model: type[Model], dct: dict, oid):
     return await model.update_or_create(dct, **{model._meta.pk_attr: oid})
 
