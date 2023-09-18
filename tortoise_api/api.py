@@ -1,15 +1,19 @@
 import logging
 from os import getenv as env
 from types import ModuleType
-from typing import Annotated
+from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute, APIRouter
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
+from fastapi_cache.decorator import cache
 from starlette.requests import Request
-from starlette.responses import JSONResponse
-from tortoise.contrib.pydantic import pydantic_model_creator
+from starlette.responses import JSONResponse, RedirectResponse
+from starlette.routing import Route
+from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
 from tortoise.contrib.starlette import register_tortoise
 
 from tortoise_api_model import Model
@@ -56,22 +60,27 @@ class Api:
         self.app = FastAPI(debug=debug, routes=auth_routes, title=title)
         # api routes
         api_router = APIRouter(routes=[
-            APIRoute('/', self.api_menu),
-            APIRoute('/{model}', self.all, methods=['GET']),
-            APIRoute('/{model}', self.create, methods=['POST']),
-            APIRoute('/{model}/{oid}', self.one_get, methods=['GET']),
-            APIRoute('/{model}/{oid}', self.one_update, methods=['POST']),
-            APIRoute('/{model}/{oid}', self.one_delete, methods=['DELETE']),
+            Route('/', lambda r: RedirectResponse('/docs', status_code=301)),
+            APIRoute('/models', self.api_menu, name='All models description'),
+            APIRoute('/model/{model}', self.all, methods=['GET'], name='Dynamic model objects list'),
+            APIRoute('/model/{model}', self.create, methods=['POST'], name='Dynamic model object create'),
+            APIRoute('/model/{model}/{oid}', self.one_get, methods=['GET'], name='Dynamic model object get'),
+            APIRoute('/model/{model}/{oid}', self.one_update, methods=['POST'], name='Dynamic model object update'),
+            APIRoute('/model/{model}/{oid}', self.one_delete, methods=['DELETE'], name='Dynamic model object delete'),
         ])
-        self.app.include_router(api_router, prefix='/api', tags=["api"], dependencies=[Depends(get_current_user)])
+        self.app.include_router(api_router, tags=["api"], dependencies=[Depends(get_current_user)])
         # db init
         load_dotenv()
         register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [models_module]}, generate_schemas=debug)
+        FastAPICache.init(InMemoryBackend(), expire=600)
 
 
     # ROUTES
-    async def api_menu(self, token: Annotated[str, Depends(get_current_user)]):
-        return JSONResponse(list(self.models))
+    @cache()
+    async def api_menu(self):
+        pm: type[PydanticModel]
+        mds: {str: {str: Any}} = {n: pydantic_model_creator(m).model_json_schema()['properties'] for n, m in self.models.items()}
+        return ORJSONResponse(mds)
 
 
     async def create(self, data: dict, model: str):
