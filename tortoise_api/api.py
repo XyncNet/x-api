@@ -11,8 +11,7 @@ from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from fastapi_cache.decorator import cache
 from starlette.requests import Request
-from starlette.responses import JSONResponse, RedirectResponse
-from starlette.routing import Route
+from starlette.responses import JSONResponse
 from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
 from tortoise.contrib.starlette import register_tortoise
 
@@ -32,7 +31,6 @@ class Api:
         models_module: ModuleType,
         debug: bool = False,
         title: str = 'FemtoAPI',
-        # auth_provider: AuthProvider = None, # todo: add auth
     ):
         """
         Parameters:
@@ -60,7 +58,6 @@ class Api:
         self.app = FastAPI(debug=debug, routes=auth_routes, title=title)
         # api routes
         api_router = APIRouter(routes=[
-            Route('/', lambda r: RedirectResponse('/docs', status_code=301)),
             APIRoute('/models', self.api_menu, name='All models description'),
             APIRoute('/model/{model}', self.all, methods=['GET'], name='Dynamic model objects list'),
             APIRoute('/model/{model}', self.create, methods=['POST'], name='Dynamic model object create'),
@@ -88,7 +85,6 @@ class Api:
         obj: Model = await model.upsert(data)
         jsn: dict = await jsonify(obj)
         return ORJSONResponse(jsn, status_code=201) # create
-        # return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
 
     async def all(self, model: str, limit: int = 50, page: int = 1):
         model: type[Model] = self.models.get(model)
@@ -106,7 +102,6 @@ class Api:
         obj: Model = await model.upsert(data, oid)
         jsn: dict = await jsonify(obj)
         return ORJSONResponse(jsn, status_code=202) # update
-        # return RedirectResponse('/list/'+model.__name__, 303) # create # {True: 201, False: 202}[res[1]]
 
     async def one_delete(self, request: Request, model: str, oid: int):
         model: type[Model] = self.models.get(model)
