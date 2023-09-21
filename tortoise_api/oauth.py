@@ -4,9 +4,9 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError
 from starlette import status
+from tortoise.contrib.pydantic import pydantic_model_creator
 from tortoise_api_model.model import User, UserStatus, Model
 
 # to get a string like this run: openssl rand -hex 32
@@ -29,23 +29,22 @@ class NewUser(BaseModel):
     phone: int | None = None
 
 user_model: Model.__class__ = User
-cc = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
-    scopes={"me": "Read information about the current user.", "items": "Read items."},
+    scopes={"my": "Access only myself created items", "read": "Read items", "write": "Write items"},
 )
 
 
 async def reg_user(new_user: NewUser):
-    new_user.password = cc.hash(new_user.password)
-    if await user_model.create(**new_user.model_dump()):
-        return new_user
+    if user := await user_model.create(**new_user.model_dump()):
+        serialized_user = await pydantic_model_creator(user_model).from_tortoise_orm(user)
+        return serialized_user
 
 async def authenticate_user(username: str, password: str) -> NewUser | bool:
     if user := await user_model.get_or_none(username=username):
         pyd_user = NewUser.model_validate(user, from_attributes=True)
-        if cc.verify(password, user.password):
+        if user.vrf_pwd(password):
             return pyd_user
     return False
 
@@ -93,10 +92,15 @@ async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str
     return user
 
 
-async def get_current_active_user(current_user: Annotated[user_model, Security(get_current_user, scopes=["me"])]) -> user_model:
+async def get_current_active_user(current_user: Annotated[user_model, Security(get_current_user, scopes=["my"])]) -> user_model:
     if current_user.status == UserStatus.Inactive:
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
+
+
+my = Security(get_current_active_user, scopes=["my"])
+read = Security(get_current_active_user, scopes=["read"])
+write = Security(get_current_active_user, scopes=["write"])
 
 
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Annotated[dict, Token]:

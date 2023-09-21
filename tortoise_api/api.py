@@ -14,8 +14,10 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
 from tortoise.contrib.starlette import register_tortoise
+from tortoise.signals import pre_save
 
-from tortoise_api_model import Model
+from tortoise_api_model import Model, User
+from tortoise_api_model.model import hash_pwd
 
 from tortoise_api import oauth
 from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user
@@ -25,6 +27,8 @@ from tortoise_api.util import jsonify, delete
 class Api:
     app: FastAPI
     models: {str: Model}
+    user_model: User
+    redis = None
 
     def __init__(
         self,
@@ -47,7 +51,9 @@ class Api:
         [to_hide.update(m[1:]) for m in models.values()]
         # set global only top models list
         self.models: {str: Model.__class__} = {m.__name__: m for m in set(models.keys()) - to_hide}
-        oauth.user_model = self.models.get('User')
+        self.user_model = self.models['User']
+        pre_save(self.user_model)(hash_pwd)
+        oauth.user_model = self.user_model  # todo: maybe some refactor?
         # get auth token route
         auth_routes = [
             APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp'),

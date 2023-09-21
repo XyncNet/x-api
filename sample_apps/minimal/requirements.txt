@@ -4,5 +4,4 @@ git+ssh://git@github.com/mixartemev/tortoise-api-model.git
 tortoise-orm[asyncpg]
 uvicorn
 python-jose[cryptography]
-passlib[bcrypt]
 python-multipart
