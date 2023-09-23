@@ -34,6 +34,3 @@ async def jsonify(obj: Model) -> dict:
 
 async def update(model: type[Model], dct: dict, oid):
     return await model.update_or_create(dct, **{model._meta.pk_attr: oid})
-
-async def delete(model: type[Model], oid):
-    return await (await model[oid]).delete()

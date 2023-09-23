@@ -12,7 +12,7 @@ from tortoise_api_model.model import User, UserStatus, Model
 # to get a string like this run: openssl rand -hex 32
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60
+EXPIRES = timedelta(hours=1)
 
 class Token(BaseModel):
     access_token: str
@@ -22,31 +22,38 @@ class TokenData(BaseModel):
     username: str | None = None
     scopes: list[str] = []
 
-class NewUser(BaseModel):
+class UserCred(BaseModel):
     username: str
     password: str
-    email: str | None = None
-    phone: int | None = None
+    # email: str|None = None
+    # phone: int|None = None
 
 user_model: Model.__class__ = User
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
-    scopes={"my": "Access only myself created items", "read": "Read items", "write": "Write items"},
+    scopes={"my": "Access only myself created items", "read": "Read items", "write": "Write items"}
 )
 
 
-async def reg_user(new_user: NewUser):
-    if user := await user_model.create(**new_user.model_dump()):
-        serialized_user = await pydantic_model_creator(user_model).from_tortoise_orm(user)
+async def reg_user(new_user: UserCred):
+    data = new_user.model_dump(exclude_none=True)
+    try:
+        user: User = await user_model.create(**data)
+    except Exception as e:
+        return e
+    if user:
+        pyd_user_model = pydantic_model_creator(user_model)
+        serialized_user = await pyd_user_model.from_tortoise_orm(user)
         return serialized_user
 
-async def authenticate_user(username: str, password: str) -> NewUser | bool:
+async def authenticate_user(username: str, password: str) -> UserCred | dict:
     if user := await user_model.get_or_none(username=username):
-        pyd_user = NewUser.model_validate(user, from_attributes=True)
+        pyd_user = UserCred.model_validate(user, from_attributes=True)
         if user.vrf_pwd(password):
             return pyd_user
-    return False
+        return {'error': 'password'}
+    return {'error': 'login'}
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
@@ -104,12 +111,11 @@ write = Security(get_current_active_user, scopes=["write"])
 
 
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Annotated[dict, Token]:
-    user: NewUser = await authenticate_user(form_data.username, form_data.password)
+    user: UserCred = await authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(status_code=400, detail="Incorrect username or password")
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username, "scopes": form_data.scopes},
-        expires_delta=access_token_expires,
+        expires_delta=EXPIRES,
     )
     return {"access_token": access_token, "token_type": "bearer"}
