@@ -12,7 +12,7 @@ dependencies = [
     "asyncpg",
     "python-dotenv",
     "fastapi",
-    "fastapi-cache2",
+#    "fastapi-cache2",
     "tortoise-api-model",
     "orjson",
     "uvicorn",
@@ -20,7 +20,7 @@ dependencies = [
     "passlib[bcrypt]",
     "python-multipart",
 ]
-version = "0.4.6"
+version = "0.5.0"
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"

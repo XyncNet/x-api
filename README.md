@@ -3,7 +3,7 @@
 Fully async Zero config One line ASGI app
 
 #### Requirements
-- Python >= 3.9
+- Python >= 3.10
 
 ### INSTALL
 ```bash

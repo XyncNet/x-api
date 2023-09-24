@@ -10,9 +10,7 @@ from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute, APIRouter
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
-from fastapi_cache.decorator import cache
 from starlette import status
-from starlette.requests import Request
 from starlette.responses import JSONResponse
 from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
 from tortoise.contrib.starlette import register_tortoise
@@ -68,7 +66,7 @@ class Api:
         # db init
         load_dotenv()
         register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [models_module]}, generate_schemas=debug)
-        FastAPICache.init(InMemoryBackend(), expire=600)
+        # FastAPICache.init(InMemoryBackend(), expire=600)
 
     def set_routes(self):
         for name, model in self.models.items():
@@ -107,11 +105,3 @@ class Api:
                 APIRoute('/'+name+'/{oid}', partial(one_delete), methods=['DELETE'], name=name+' object delete'),
             ])
             self.app.include_router(ar, tags=[name], dependencies=[Depends(get_current_user)])
-
-
-
-
-
-
-
-
