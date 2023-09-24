@@ -8,8 +8,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Path
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute, APIRouter
-from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
+# from fastapi_cache import FastAPICache
+# from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
 from starlette.responses import JSONResponse
 from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
@@ -70,7 +70,7 @@ class Api:
 
     def set_routes(self):
         for name, model in self.models.items():
-            pyd_model = pydantic_model_creator(model, name=name)
+            pyd_model: type[PydanticModel] = pydantic_model_creator(model, name=name)
             in_model = pydantic_model_creator(model, name='New'+name, exclude_readonly=True)
 
             async def all(limit: int = 50, page: int = 1):
