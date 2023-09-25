@@ -51,17 +51,22 @@ class Api:
         [to_hide.update(m[1:]) for m in models.values()]
         # set global only top models list
         self.models: {str: Model.__class__} = {m.__name__: m for m in set(models.keys()) - to_hide}
-        self.user_model = self.models['User']
+        self.user_model: type[User] = self.models['User']
         pre_save(self.user_model)(hash_pwd)
-        oauth.user_model = self.user_model  # todo: maybe some refactor?
+        pyd_user_model = pydantic_model_creator(self.user_model)
+        if self.user_model is not User: # if User type overriden
+            # global user model inject current overriden User type
+            oauth.user_model = self.user_model  # todo: maybe some refactor?
+            # and also pydantic model for this User type
+            oauth.pyd_user_model = pyd_user_model
         # get auth token route
         auth_routes = [
-            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp'),
+            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=pyd_user_model), # , response_model=NewUser
             APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
         ]
 
         # main app
-        self.app = FastAPI(debug=debug, routes=auth_routes, title=title)
+        self.app = FastAPI(debug=debug, routes=auth_routes, title=title, default_response_class=ORJSONResponse)
         Tortoise.init_models([models_module], "models")
         self.set_routes()
         # db init
@@ -77,11 +82,11 @@ class Api:
             async def index(limit: int = 50, page: int = 1):
                 objects: [Model] = await model.all().prefetch_related(*model._meta.fetch_fields).limit(limit).offset(limit * (page - 1))
                 data = [await obj.with_rels() for obj in objects]
-                return ORJSONResponse({'data': data})  # show all
+                return {'data': data}  # show all
 
             async def one(item_id: Annotated[int, Path(title=name+" ID")]):
                 obj = await model.get(id=item_id).prefetch_related(*model._meta.fetch_fields)
-                return ORJSONResponse(await obj.with_rels())  # show one
+                return await obj.with_rels()  # show one
 
             async def create(obj: in_model):
                 obj_dict = obj.model_dump()

@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, ConfigDict
 from starlette import status
 from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
 from tortoise_api_model.model import User, UserStatus, Model
@@ -32,10 +32,12 @@ class UserCred(BaseModel):
     password: str
 
 class NewUser(UserCred):
+    model_config = ConfigDict(extra='allow')
     email: str|None = None
     phone: int|None = None
 
-user_model: Model.__class__ = User
+user_model = User
+pyd_user_model: type[PydanticModel]
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
@@ -43,14 +45,13 @@ oauth2_scheme = OAuth2PasswordBearer(
 )
 
 # api reg endpoint
-async def reg_user(new_user: UserCred) -> PydanticModel:
-    data = new_user.model_dump(exclude_none=True)
+async def reg_user(new_user: NewUser):
+    data = new_user.model_dump()
     try:
         user: User = await user_model.create(**data)
     except Exception as e:
         raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
     if user:
-        pyd_user_model = pydantic_model_creator(user_model)
         serialized_user = await pyd_user_model.from_tortoise_orm(user)
         return serialized_user
 
