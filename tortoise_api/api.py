@@ -5,9 +5,10 @@ from types import ModuleType
 from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, Path
+from fastapi import FastAPI, Depends, Path, HTTPException
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute, APIRouter
+from pydantic import SecretStr, BaseModel
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
@@ -21,7 +22,7 @@ from tortoise_api_model import Model, User
 from tortoise_api_model.model import hash_pwd
 
 from tortoise_api import oauth
-from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user
+from tortoise_api.oauth import login_for_access_token, Token, get_current_user
 
 
 class Api:
@@ -51,24 +52,38 @@ class Api:
         [to_hide.update(m[1:]) for m in models.values()]
         # set global only top models list
         self.models: {str: Model.__class__} = {m.__name__: m for m in set(models.keys()) - to_hide}
-        self.user_model: type[User] = self.models['User']
-        pre_save(self.user_model)(hash_pwd)
-        pyd_user_model = pydantic_model_creator(self.user_model)
-        if self.user_model is not User: # if User type overriden
-            # global user model inject current overriden User type
-            oauth.user_model = self.user_model  # todo: maybe some refactor?
-            # and also pydantic model for this User type
-            oauth.pyd_user_model = pyd_user_model
+        user_model: type[User] = self.models['User']
+        pre_save(user_model)(hash_pwd)
+
+        out_user = pydantic_model_creator(user_model)
+
+        class InUser(BaseModel):
+            username: str
+            password: SecretStr
+            email: str|None
+            phone: int|None
+
+        async def reg_user(new_user: InUser) -> out_user:
+            data = new_user.model_dump()
+            try:
+                user: user_model = await user_model.create(**data)
+            except Exception as e:
+                raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
+            return await out_user.from_tortoise_orm(user)
+
+        # global user model inject current overriden User type
+        oauth.UserModel = user_model  # todo: maybe some refactor?
+
         # get auth token route
         auth_routes = [
-            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=pyd_user_model), # , response_model=NewUser
+            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=out_user),
             APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
         ]
 
         # main app
         self.app = FastAPI(debug=debug, routes=auth_routes, title=title, default_response_class=ORJSONResponse)
         Tortoise.init_models([models_module], "models")
-        self.set_routes()
+        # self.set_routes()
         # db init
         load_dotenv()
         register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [models_module]}, generate_schemas=debug)
