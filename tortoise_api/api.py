@@ -2,7 +2,7 @@ import logging
 from functools import partial
 from os import getenv as env
 from types import ModuleType
-from typing import Any, Annotated
+from typing import Annotated
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Path
@@ -12,6 +12,7 @@ from fastapi.routing import APIRoute, APIRouter
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
 from starlette.responses import JSONResponse
+from tortoise import Tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
 from tortoise.contrib.starlette import register_tortoise
 from tortoise.signals import pre_save
@@ -21,7 +22,6 @@ from tortoise_api_model.model import hash_pwd
 
 from tortoise_api import oauth
 from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user
-from tortoise_api.util import jsonify
 
 
 class Api:
@@ -62,6 +62,7 @@ class Api:
 
         # main app
         self.app = FastAPI(debug=debug, routes=auth_routes, title=title)
+        Tortoise.init_models([models_module], "models")
         self.set_routes()
         # db init
         load_dotenv()
@@ -73,35 +74,35 @@ class Api:
             pyd_model: type[PydanticModel] = pydantic_model_creator(model, name=name)
             in_model = pydantic_model_creator(model, name='New'+name, exclude_readonly=True)
 
-            async def all(limit: int = 50, page: int = 1):
+            async def index(limit: int = 50, page: int = 1):
                 objects: [Model] = await model.all().prefetch_related(*model._meta.fetch_fields).limit(limit).offset(limit * (page - 1))
-                data = [await jsonify(obj) for obj in objects]
-                return JSONResponse({'data': data})  # show all
+                data = [await obj.with_rels() for obj in objects]
+                return ORJSONResponse({'data': data})  # show all
 
-            async def one_get(item_id: Annotated[int, Path(title=name+" ID")]):
+            async def one(item_id: Annotated[int, Path(title=name+" ID")]):
                 obj = await model.get(id=item_id).prefetch_related(*model._meta.fetch_fields)
-                return JSONResponse(await jsonify(obj))  # show one
+                return ORJSONResponse(await obj.with_rels())  # show one
 
             async def create(obj: in_model):
                 obj_dict = obj.model_dump()
                 obj_db: Model = await model.upsert(obj_dict)
-                jsn: dict = await jsonify(obj_db)
+                jsn: dict = await obj_db.with_rels()
                 return ORJSONResponse(jsn, status_code=status.HTTP_201_CREATED)  # create
 
-            async def one_update(obj: in_model, oid: int):
-                obj_db: Model = await model.upsert(obj.model_dump(), oid)
-                jsn: dict = await jsonify(obj_db)
+            async def update(obj: in_model, item_id: int):
+                obj_db: Model = await model.upsert(obj.model_dump(), item_id)
+                jsn: dict = await obj_db.with_rels()
                 return ORJSONResponse(jsn, status_code=status.HTTP_202_ACCEPTED)  # update
 
-            async def one_delete(item_id: int):
+            async def delete(item_id: int):
                 await (await model[item_id]).delete()
                 return JSONResponse(True, status_code=status.HTTP_205_RESET_CONTENT)  # delete
 
             ar = APIRouter(routes=[
-                APIRoute('/'+name, partial(all), methods=['GET'], name=name+' objects list', response_model=list[pyd_model]),
+                APIRoute('/'+name, partial(index), methods=['GET'], name=name+' objects list', response_model=list[pyd_model]),
                 APIRoute('/'+name, partial(create), methods=['POST'], name=name+' object create', response_model=pyd_model, description='321321'),
-                APIRoute('/'+name+'/{oid}', partial(one_get), methods=['GET'], name=name+' object get', response_model=pyd_model),
-                APIRoute('/'+name+'/{oid}', partial(one_update), methods=['POST'], name=name+' object update', response_model=pyd_model),
-                APIRoute('/'+name+'/{oid}', partial(one_delete), methods=['DELETE'], name=name+' object delete'),
+                APIRoute('/'+name+'/{item_id}', partial(one), methods=['GET'], name=name+' object get', response_model=pyd_model),
+                APIRoute('/'+name+'/{item_id}', partial(update), methods=['POST'], name=name+' object update', response_model=pyd_model),
+                APIRoute('/'+name+'/{item_id}', partial(delete), methods=['DELETE'], name=name+' object delete'),
             ])
             self.app.include_router(ar, tags=[name], dependencies=[Depends(get_current_user)])
