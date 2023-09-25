@@ -83,7 +83,7 @@ class Api:
         # main app
         self.app = FastAPI(debug=debug, routes=auth_routes, title=title, default_response_class=ORJSONResponse)
         Tortoise.init_models([models_module], "models")
-        # self.set_routes()
+        self.set_routes()
         # db init
         load_dotenv()
         register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [models_module]}, generate_schemas=debug)
