@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Path, HTTPException
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute, APIRouter
-from pydantic import SecretStr, BaseModel
+from pydantic import BaseModel
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
@@ -59,9 +59,9 @@ class Api:
 
         class InUser(BaseModel):
             username: str
-            password: SecretStr
-            email: str|None
-            phone: int|None
+            password: str
+            email: str | None = None
+            phone: int | None = None
 
         async def reg_user(new_user: InUser) -> out_user:
             data = new_user.model_dump()
