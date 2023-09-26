@@ -7,6 +7,7 @@ from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2Passwor
 from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
 from starlette import status
+from tortoise.contrib.pydantic import PydanticModel
 from tortoise_api_model.model import User, UserStatus
 
 # to get a string like this run: openssl rand -hex 32
@@ -15,8 +16,8 @@ ALGORITHM = "HS256"
 EXPIRES = timedelta(hours=1)
 
 class AuthFailReason(IntEnum):
-    username: 1
-    password: 2
+    username = 1
+    password = 2
 
 class Token(BaseModel):
     access_token: str
@@ -31,22 +32,37 @@ class UserCred(BaseModel):
     password: str
 
 UserModel = User
+UserSchema: PydanticModel
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
     scopes={"my": "Access only myself created items", "read": "Read items", "write": "Write items"}
 )
 
+
+class InUser(UserCred):
+    email: str | None = None
+    phone: int | None = None
+
+# api login endpoint
+async def reg_user(new_user: InUser):
+    data = new_user.model_dump()
+    try:
+        user: UserModel = await UserModel.create(**data)
+    except Exception as e:
+        raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
+    return await UserSchema.from_tortoise_orm(user)
+
 # api login endpoint
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Annotated[dict, Token]:
-    user: UserCred = await authenticate_user(form_data.username, form_data.password)
-    if not user:
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    access_token = gen_access_token(
-        data={"sub": user.username, "scopes": form_data.scopes},
-        expires_delta=EXPIRES,
-    )
-    return {"access_token": access_token, "token_type": "bearer"}
+    user: UserCred|AuthFailReason = await authenticate_user(form_data.username, form_data.password)
+    if isinstance(user, UserCred):
+        access_token = gen_access_token(
+            data={"sub": user.username, "scopes": form_data.scopes},
+            expires_delta=EXPIRES,
+        )
+        return {"access_token": access_token, "token_type": "bearer"}
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Incorrect {user.name}")
 
 
 async def authenticate_user(username: str, password: str) -> UserCred|AuthFailReason:
