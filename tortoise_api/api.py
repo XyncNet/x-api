@@ -66,8 +66,11 @@ class Api:
         pm_out.max_recursion = 1
 
         def gen_schemas(mdl: type[Model], key: str) -> (type[PydanticModel], type[PydanticModel]):
-            return pydantic_model_creator(mdl, name=key+'-In', meta_override=pm_in, exclude_readonly=True),  pydantic_model_creator(mdl, name=key, meta_override=pm_out)
-
+            return (
+                # todo: why 'created_at' and 'updated_at' are not excluding from -In schema, cause they are readonly?
+                pydantic_model_creator(mdl, name=key+'-In', meta_override=pm_in, exclude_readonly=True, exclude=('created_at', 'updated_at')),
+                pydantic_model_creator(mdl, name=key, meta_override=pm_out)
+            )
 
         schemas: {str: (type[PydanticModel], type[PydanticModel])} = {k: gen_schemas(m, k) for k, m in self.models.items()}
 
@@ -104,18 +107,19 @@ class Api:
                 mod, pyd = _req2mod(request)
                 return await pyd[1].from_queryset_single(mod[item_id])  # show one
 
-            async def create(obj: schema[0]):
+            async def create(request: Request, obj: schema[0]):
                 mod: type[Model] = obj.model_config['orig_model']
+                pyd = _req2mod(request)[1][1]
                 obj_dict = obj.model_dump()
-                obj_db: Model = await model.upsert(obj_dict)
-                jsn: type[schema[1]] = await schema[1].model_validate(obj_db, from_attributes=True)
-                return ORJSONResponse(jsn, status_code=status.HTTP_201_CREATED)  # create
+                obj_db: Model = await mod.upsert(obj_dict)
+                jsn: type[pyd] = await pyd.from_tortoise_orm(obj_db)
+                return jsn # create
 
             async def update(obj: schema[0], item_id: int):
                 mod: type[Model] = obj.model_config['orig_model']
-                obj_db: Model = await model.upsert(obj.model_dump(), item_id)
+                obj_db: Model = await mod.upsert(obj.model_dump(), item_id)
                 jsn: type[schema[1]] = await schema[1].model_validate(obj_db, from_attributes=True)
-                return ORJSONResponse(jsn, status_code=status.HTTP_202_ACCEPTED)  # update
+                return ORJSONResponse(jsn, status_code=status.HTTP_202_ACCEPTED) # update
 
             async def delete(req: Request, item_id: int):
                 mod, _ = _req2mod(req)
