@@ -105,7 +105,7 @@ class Api:
 
             async def one(request: Request, item_id: Annotated[int, Path(title=name+" ID")]):
                 mod, pyd = _req2mod(request)
-                return await pyd[1].from_queryset_single(mod[item_id])  # show one
+                return await pyd[1].from_queryset_single(mod.get(id=item_id))  # show one
 
             async def create(request: Request, obj: schema[0]):
                 mod: type[Model] = obj.model_config['orig_model']
