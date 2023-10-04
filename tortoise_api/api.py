@@ -107,19 +107,16 @@ class Api:
                 mod, pyd = _req2mod(request)
                 return await pyd[1].from_queryset_single(mod.get(id=item_id))  # show one
 
-            async def create(request: Request, obj: schema[0]):
+            async def upsert(request: Request, obj: schema[0], item_id: int|None = None):
                 mod: type[Model] = obj.model_config['orig_model']
                 pyd = _req2mod(request)[1][1]
                 obj_dict = obj.model_dump()
-                obj_db: Model = await mod.upsert(obj_dict)
+                args = [obj_dict]
+                if item_id:
+                    args.append(item_id)
+                obj_db: Model = await mod.upsert(*args)
                 jsn: type[pyd] = await pyd.from_tortoise_orm(obj_db)
-                return jsn # create
-
-            async def update(obj: schema[0], item_id: int):
-                mod: type[Model] = obj.model_config['orig_model']
-                obj_db: Model = await mod.upsert(obj.model_dump(), item_id)
-                jsn: type[schema[1]] = await schema[1].model_validate(obj_db, from_attributes=True)
-                return ORJSONResponse(jsn, status_code=status.HTTP_202_ACCEPTED) # update
+                return jsn
 
             async def delete(req: Request, item_id: int):
                 mod, _ = _req2mod(req)
@@ -128,9 +125,9 @@ class Api:
 
             ar = APIRouter(routes=[
                 APIRoute('/'+name, index, methods=['GET'], name=name+' objects list', response_model=list[schema[1]]),
-                APIRoute('/'+name, create, methods=['POST'], name=name+' object create', response_model=schema[1], description='321321'),
+                APIRoute('/'+name, upsert, methods=['POST'], name=name+' object create', response_model=schema[1]),
                 APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[1]),
-                APIRoute('/'+name+'/{item_id}', update, methods=['POST'], name=name+' object update', response_model=schema[1]),
+                APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', response_model=schema[1]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', response_model=bool),
             ])
             self.app.include_router(ar, tags=[name], dependencies=[Depends(get_current_user)])
