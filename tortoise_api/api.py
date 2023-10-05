@@ -4,14 +4,13 @@ from types import ModuleType
 from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, Path
+from fastapi import FastAPI, Depends, Path, HTTPException
 from fastapi.responses import ORJSONResponse
 from fastapi.routing import APIRoute, APIRouter
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 from tortoise import Tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
 from tortoise.contrib.pydantic.creator import PydanticMeta
@@ -120,15 +119,18 @@ class Api:
 
             async def delete(req: Request, item_id: int):
                 mod, _ = _req2mod(req)
-                await (await mod[item_id]).delete()
-                return JSONResponse(True, status_code=status.HTTP_205_RESET_CONTENT)  # delete
+                try:
+                    r = await mod.get(id=item_id).delete()
+                    return {'deleted': r}
+                except Exception as e:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
 
             ar = APIRouter(routes=[
                 APIRoute('/'+name, index, methods=['GET'], name=name+' objects list', response_model=list[schema[1]]),
                 APIRoute('/'+name, upsert, methods=['POST'], name=name+' object create', response_model=schema[1]),
                 APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[1]),
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', response_model=schema[1]),
-                APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', response_model=bool),
+                APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', response_model=dict),
             ])
             self.app.include_router(ar, tags=[name], dependencies=[Depends(get_current_user)])
 
