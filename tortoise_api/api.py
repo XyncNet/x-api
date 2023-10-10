@@ -15,7 +15,7 @@ from tortoise import Tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
 from tortoise.contrib.pydantic.creator import PydanticMeta
 from tortoise.contrib.starlette import register_tortoise
-from tortoise.exceptions import IntegrityError
+from tortoise.exceptions import IntegrityError, DoesNotExist
 from tortoise.queryset import QuerySet
 from tortoise.signals import pre_save
 
@@ -105,10 +105,10 @@ class Api:
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod, pyd = _req2mod(request)
-                obj: Model = mod.get_or_none(id=item_id)
-                if not obj:
+                try:
+                    return await pyd[1].from_queryset_single(mod.get(id=item_id))  # show one
+                except DoesNotExist as e:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-                return await pyd[1].from_queryset_single(mod.get(id=item_id))  # show one
 
             async def upsert(request: Request, obj: schema[0], item_id: int|None = None):
                 mod: type[Model] = obj.model_config['orig_model']
