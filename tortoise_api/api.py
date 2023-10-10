@@ -15,6 +15,7 @@ from tortoise import Tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
 from tortoise.contrib.pydantic.creator import PydanticMeta
 from tortoise.contrib.starlette import register_tortoise
+from tortoise.exceptions import IntegrityError
 from tortoise.queryset import QuerySet
 from tortoise.signals import pre_save
 
@@ -102,8 +103,11 @@ class Api:
                 data = await pyd[1].from_queryset(objects)
                 return data  # show all
 
-            async def one(request: Request, item_id: Annotated[int, Path(title=name+" ID")]):
+            async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod, pyd = _req2mod(request)
+                obj: Model = mod.get_or_none(id=item_id)
+                if not obj:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
                 return await pyd[1].from_queryset_single(mod.get(id=item_id))  # show one
 
             async def upsert(request: Request, obj: schema[0], item_id: int|None = None):
@@ -113,7 +117,10 @@ class Api:
                 args = [obj_dict]
                 if item_id:
                     args.append(item_id)
-                obj_db: Model = await mod.upsert(*args)
+                try:
+                    obj_db: Model = await mod.upsert(*args)
+                except IntegrityError as e:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
                 jsn: type[pyd] = await pyd.from_tortoise_orm(obj_db)
                 return jsn
 
