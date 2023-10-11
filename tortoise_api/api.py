@@ -35,6 +35,7 @@ class Api:
         models_module: ModuleType,
         debug: bool = False,
         title: str = 'FemtoAPI',
+        exc_models: [str] = [],
     ):
         """
         Parameters:
@@ -47,7 +48,7 @@ class Api:
         # extract models from module
         all_models: {Model.__class__: [Model.__class__]} = {model: model.mro() for key in dir(models_module) if isinstance(model := getattr(models_module, key), Model.__class__) and model==model.mro()[0]}
         # collect parents models for hiding
-        to_hide: set[Model.__class__] = set()
+        to_hide: set[Model.__class__] = set(exc_models)
         [to_hide.update(m[1:]) for m in all_models.values()]
         # filter only top model names
         top_models = set(all_models.keys()) - to_hide
