@@ -8,6 +8,7 @@ from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
 from starlette import status
 from tortoise.contrib.pydantic import PydanticModel
+from tortoise_api_model.enums import Scope, UserRole
 from tortoise_api_model.model import User, UserStatus
 
 # to get a string like this run: openssl rand -hex 32
@@ -36,7 +37,11 @@ UserSchema: PydanticModel
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
-    scopes={"my": "Access only myself created items", "read": "Read items", "write": "Write items"}
+    scopes={
+        Scope.Read.name: "Read own items",
+        Scope.Write.name: "Write own items",
+        Scope.All.name: "Access for not only own items"
+    }
 )
 
 
@@ -44,40 +49,6 @@ class InUser(UserCred):
     email: str | None = None
     phone: int | None = None
 
-# api login endpoint
-async def reg_user(new_user: InUser):
-    data = new_user.model_dump()
-    try:
-        user: UserModel = await UserModel.create(**data)
-    except Exception as e:
-        raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
-    return await UserSchema.from_tortoise_orm(user)
-
-# api login endpoint
-async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Annotated[dict, Token]:
-    user: UserCred|AuthFailReason = await authenticate_user(form_data.username, form_data.password)
-    if isinstance(user, UserCred):
-        access_token = gen_access_token(
-            data={"sub": user.username, "scopes": form_data.scopes},
-            expires_delta=EXPIRES,
-        )
-        return {"access_token": access_token, "token_type": "bearer"}
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Incorrect {user.name}")
-
-
-async def authenticate_user(username: str, password: str) -> UserCred|AuthFailReason:
-    if user := await UserModel.get_or_none(username=username):
-        pyd_user = UserCred.model_validate(user, from_attributes=True)
-        if user.vrf_pwd(password):
-            return pyd_user
-        return AuthFailReason.password
-    return AuthFailReason.username
-
-
-def gen_access_token(data: dict, expires_delta: timedelta = EXPIRES) -> str:
-    to_encode = data.copy()
-    to_encode.update({"exp": datetime.utcnow() + expires_delta})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 # dependency
 async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str, Depends(oauth2_scheme)]) -> UserModel:
@@ -109,12 +80,55 @@ async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str
     return user
 
 # dependency
-async def get_current_active_user(current_user: Annotated[UserModel, Security(get_current_user, scopes=["my"])]) -> UserModel:
+async def get_current_active_user(current_user: Annotated[UserModel, Security(get_current_user)]) -> UserModel:
     if current_user.status == UserStatus.Inactive:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
     return current_user
 
 
-my = Security(get_current_active_user, scopes=["my"])
-read = Security(get_current_active_user, scopes=["read"])
-write = Security(get_current_active_user, scopes=["write"])
+read = Security(get_current_active_user, scopes=[Scope.Read.name])
+write = Security(get_current_active_user, scopes=[Scope.Write.name])
+my = Security(get_current_active_user, scopes=[Scope.All.name])
+not_active = Depends(get_current_user)
+
+scopes = {
+    UserRole.Client: [Scope.Read.name], # read only own
+    UserRole.Agent: [Scope.Read.name, Scope.All.name], # read all
+    UserRole.Manager: [Scope.Read.name, Scope.Write.name], # read/write only own
+    UserRole.Admin: [Scope.Read.name, Scope.Write.name, Scope.All.name], # all
+}
+
+
+# api reg endpoint
+async def reg_user(new_user: InUser):
+    data = new_user.model_dump()
+    try:
+        user: UserModel = await UserModel.create(**data)
+    except Exception as e:
+        raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
+    return await UserSchema.from_tortoise_orm(user)
+
+# api login endpoint
+async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Annotated[dict, Token]:
+    async def authenticate_user(username: str, password: str) -> TokenData | AuthFailReason:
+        if user_db := await UserModel.get_or_none(username=username):
+            td = TokenData.model_validate(user_db, from_attributes=True)
+            td.scopes = scopes[user_db.role]
+            if user_db.vrf_pwd(password):
+                return td
+            return AuthFailReason.password
+        return AuthFailReason.username
+
+    def gen_access_token(data: dict, expires_delta: timedelta = EXPIRES) -> str:
+        to_encode = data.copy()
+        to_encode.update({"exp": datetime.utcnow() + expires_delta})
+        return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+    user: TokenData|AuthFailReason = await authenticate_user(form_data.username, form_data.password)
+    if isinstance(user, TokenData):
+        access_token = gen_access_token(
+            data={"sub": user.username, "scopes": user.scopes},
+            expires_delta=EXPIRES,
+        )
+        return {"access_token": access_token, "token_type": "bearer"}
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Incorrect {user.name}")
