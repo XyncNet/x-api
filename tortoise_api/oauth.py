@@ -108,17 +108,17 @@ async def reg_user(new_user: InUser):
         raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
     return await UserSchema.from_tortoise_orm(user)
 
+async def authenticate_user(username: str, password: str) -> TokenData | AuthFailReason:
+    if user_db := await UserModel.get_or_none(username=username):
+        td = TokenData.model_validate(user_db, from_attributes=True)
+        td.scopes = scopes[user_db.role]
+        if user_db.vrf_pwd(password):
+            return td
+        return AuthFailReason.password
+    return AuthFailReason.username
+
 # api login endpoint
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Annotated[dict, Token]:
-    async def authenticate_user(username: str, password: str) -> TokenData | AuthFailReason:
-        if user_db := await UserModel.get_or_none(username=username):
-            td = TokenData.model_validate(user_db, from_attributes=True)
-            td.scopes = scopes[user_db.role]
-            if user_db.vrf_pwd(password):
-                return td
-            return AuthFailReason.password
-        return AuthFailReason.username
-
     def gen_access_token(data: dict, expires_delta: timedelta = EXPIRES) -> str:
         to_encode = data.copy()
         to_encode.update({"exp": datetime.utcnow() + expires_delta})
