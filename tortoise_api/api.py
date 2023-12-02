@@ -4,8 +4,7 @@ from types import ModuleType
 from typing import Annotated
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, Path, HTTPException
-from fastapi.responses import ORJSONResponse
+from fastapi import FastAPI, Depends, Path, HTTPException, Form
 from fastapi.routing import APIRoute, APIRouter
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
@@ -86,7 +85,7 @@ class Api:
         ]
 
         # main app
-        self.app = FastAPI(debug=debug, routes=auth_routes, title=title, default_response_class=ORJSONResponse, separate_input_output_schemas=False)
+        self.app = FastAPI(debug=debug, routes=auth_routes, title=title, separate_input_output_schemas=False)
 
         # FastAPICache.init(InMemoryBackend(), expire=600)
 
@@ -94,15 +93,15 @@ class Api:
         for name, schema in schemas.items():
             # in_model = pydantic_model_creator(self.models[name], name='New'+name, exclude_readonly=True).
 
-            def _req2mod(req: Request) -> (type[Model], type[PydanticModel]):
-                nam: str = req.scope['path'].split('/')[1]
-                return self.models[nam], schemas[nam]
+            def _req2mod(req: Request) -> type[Model]:
+                nam: str = req.scope['path'].split('/')[2]
+                return self.models[nam]
 
             async def index(request: Request, limit: int = 50, page: int = 1):
-                mod, pyd = _req2mod(request)
-                objects: QuerySet[Model] = mod.all().limit(limit).offset(limit * (page - 1))
-                data = await pyd[1].from_queryset(objects)
-                return data  # show all
+                mod: Model.__class__ = _req2mod(request)
+                data = await mod.pagePyd(limit, limit * (page - 1))
+                # total = len(data) if len(data) < limit else await query.count()
+                return data #, total  # show all
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod, pyd = _req2mod(request)
@@ -140,7 +139,7 @@ class Api:
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', response_model=schema[1]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', response_model=dict),
             ])
-            self.app.include_router(ar, tags=[name], dependencies=[Depends(get_current_user)])
+            self.app.include_router(ar, prefix='/v2', tags=[name], dependencies=[Depends(get_current_user)])
 
         # db init
         load_dotenv()

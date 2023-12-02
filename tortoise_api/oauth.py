@@ -14,15 +14,11 @@ from tortoise_api_model.model import User, UserStatus
 # to get a string like this run: openssl rand -hex 32
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
-EXPIRES = timedelta(hours=1)
+EXPIRES = timedelta(days=7)
 
 class AuthFailReason(IntEnum):
     username = 1
     password = 2
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
 
 class TokenData(BaseModel):
     username: str | None = None
@@ -33,7 +29,12 @@ class UserCred(BaseModel):
     password: str
 
 UserModel = User
-UserSchema: PydanticModel
+UserSchema: PydanticModel = UserModel.pyd()
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserSchema
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
@@ -108,14 +109,17 @@ async def reg_user(new_user: InUser):
         raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
     return await UserSchema.from_tortoise_orm(user)
 
-async def authenticate_user(username: str, password: str) -> TokenData | AuthFailReason:
+async def authenticate_user(username: str, password: str) -> tuple[TokenData, UserModel]:
     if user_db := await UserModel.get_or_none(username=username):
         td = TokenData.model_validate(user_db, from_attributes=True)
         td.scopes = scopes[user_db.role]
         if user_db.vrf_pwd(password):
-            return td
-        return AuthFailReason.password
-    return AuthFailReason.username
+            return td, user_db
+        reason = AuthFailReason.password
+    else:
+        reason = AuthFailReason.username
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Incorrect {reason.name}")
+
 
 # api login endpoint
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Annotated[dict, Token]:
@@ -124,11 +128,11 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
         to_encode.update({"exp": datetime.utcnow() + expires_delta})
         return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-    user: TokenData|AuthFailReason = await authenticate_user(form_data.username, form_data.password)
-    if isinstance(user, TokenData):
+    token, user_db = await authenticate_user(form_data.username, form_data.password)
+    if isinstance(token, TokenData):
         access_token = gen_access_token(
-            data={"sub": user.username, "scopes": user.scopes},
+            data={"sub": token.username, "scopes": token.scopes},
             expires_delta=EXPIRES,
         )
-        return {"access_token": access_token, "token_type": "bearer"}
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Incorrect {user.name}")
+        user = await UserModel.pyd().from_tortoise_orm(user_db)
+        return {"access_token": access_token, "token_type": "bearer", "user": user}
