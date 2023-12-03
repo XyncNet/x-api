@@ -28,6 +28,7 @@ class Api:
     app: FastAPI
     models: {str: Model}
     redis = None
+    prefix = '/v2'
 
     def __init__(
         self,
@@ -80,8 +81,8 @@ class Api:
 
         # get auth token route
         auth_routes = [
-            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=schemas['User'][1]),
-            APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
+            APIRoute(self.prefix+'/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=schemas['User'][1]),
+            APIRoute(self.prefix+'/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
         ]
 
         # main app
@@ -139,7 +140,7 @@ class Api:
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', response_model=schema[1]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', response_model=dict),
             ])
-            self.app.include_router(ar, prefix='/v2', tags=[name], dependencies=[Depends(get_current_user)])
+            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[Depends(get_current_user)])
 
         # db init
         load_dotenv()
