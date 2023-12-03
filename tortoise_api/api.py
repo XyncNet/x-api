@@ -15,7 +15,6 @@ from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
 from tortoise.contrib.pydantic.creator import PydanticMeta
 from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
-from tortoise.queryset import QuerySet
 from tortoise.signals import pre_save
 
 from tortoise_api_model import Model, User
@@ -105,15 +104,14 @@ class Api:
                 return data #, total  # show all
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
-                mod, pyd = _req2mod(request)
+                mod = _req2mod(request)
                 try:
-                    return await pyd[1].from_queryset_single(mod.get(id=item_id))  # show one
+                    return await mod.pyd().from_queryset_single(mod.get(id=item_id))  # show one
                 except DoesNotExist as e:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
             async def upsert(request: Request, obj: schema[0], item_id: int|None = None):
                 mod: type[Model] = obj.model_config['orig_model']
-                pyd = _req2mod(request)[1][1]
                 obj_dict = obj.model_dump()
                 args = [obj_dict]
                 if item_id:
@@ -122,11 +120,11 @@ class Api:
                     obj_db: Model = await mod.upsert(*args)
                 except IntegrityError as e:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
-                jsn: type[pyd] = await pyd.from_tortoise_orm(obj_db)
+                jsn: PydanticModel = await mod.pyd().from_tortoise_orm(obj_db)
                 return jsn
 
             async def delete(req: Request, item_id: int):
-                mod, _ = _req2mod(req)
+                mod = _req2mod(req)
                 try:
                     r = await mod.get(id=item_id).delete()
                     return {'deleted': r}
