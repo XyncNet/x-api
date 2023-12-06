@@ -81,8 +81,8 @@ class Api:
 
         # get auth token route
         auth_routes = [
-            APIRoute(self.prefix+'/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=schemas['User'][1]),
-            APIRoute(self.prefix+'/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
+            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=schemas['User'][1]),
+            APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
         ]
 
         # main app
