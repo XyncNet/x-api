@@ -8,6 +8,7 @@ from fastapi import FastAPI, Depends, Path, HTTPException, Form
 from fastapi.routing import APIRoute, APIRouter
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
+from pydantic import BaseModel, create_model
 from starlette import status
 from starlette.requests import Request
 from tortoise import Tortoise
@@ -66,13 +67,13 @@ class Api:
         pm_out.max_recursion = 1
 
         def gen_schemas(mdl: type[Model], key: str) -> (type[PydanticModel], type[PydanticModel]):
-            return (
+            return [
                 # todo: why 'created_at' and 'updated_at' are not excluding from -In schema, cause they are readonly?
                 pydantic_model_creator(mdl, name=key+'-In', meta_override=pm_in, exclude_readonly=True, exclude=('created_at', 'updated_at')),
                 pydantic_model_creator(mdl, name=key, meta_override=pm_out)
-            )
+            ]
 
-        schemas: {str: (type[PydanticModel], type[PydanticModel])} = {k: gen_schemas(m, k) for k, m in self.models.items()}
+        schemas: {str: [type[PydanticModel], type[PydanticModel]]} = {k: gen_schemas(m, k) for k, m in self.models.items()}
 
         # global user model inject current overriden User type # todo: maybe some refactor?
         oauth.UserSchema = schemas['User'][1]
@@ -81,7 +82,7 @@ class Api:
         # get auth token route
         auth_routes = [
             APIRoute(self.prefix+'/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=schemas['User'][1]),
-            APIRoute(self.prefix+'/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
+            APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
         ]
 
         # main app
@@ -97,11 +98,18 @@ class Api:
                 nam: str = req.scope['path'].split('/')[2]
                 return self.models[nam]
 
-            async def index(request: Request, limit: int = 50, page: int = 1):
+            schema.append(create_model(
+                name+'List',
+                data=(list[schema[1]], ...),
+                total=(int, 1000),
+                __base__=BaseModel,
+            ))
+
+            async def index(request: Request, limit: int = 1000, page: int = 1) -> schema[2]:
                 mod: Model.__class__ = _req2mod(request)
-                data = await mod.pagePyd(limit, limit * (page - 1))
+                data, total = await mod.pagePyd(limit, page)
                 # total = len(data) if len(data) < limit else await query.count()
-                return data #, total  # show all
+                return {'data': data, 'total': total}  # show all
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod = _req2mod(request)
@@ -132,7 +140,7 @@ class Api:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
 
             ar = APIRouter(routes=[
-                APIRoute('/'+name, index, methods=['GET'], name=name+' objects list', response_model=list[schema[1]]),
+                APIRoute('/'+name, index, methods=['GET'], name=name+' objects list', response_model=schema[2]),
                 APIRoute('/'+name, upsert, methods=['POST'], name=name+' object create', response_model=schema[1]),
                 APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[1]),
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', response_model=schema[1]),
