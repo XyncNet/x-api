@@ -1,7 +1,7 @@
 import logging
 from os import getenv as env
 from types import ModuleType
-from typing import Annotated
+from typing import Annotated, Type
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Path, HTTPException, Form
@@ -12,7 +12,7 @@ from pydantic import BaseModel, create_model
 from starlette import status
 from starlette.requests import Request
 from tortoise import Tortoise
-from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel
+from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel, PydanticListModel
 from tortoise.contrib.pydantic.creator import PydanticMeta
 from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
@@ -54,26 +54,14 @@ class Api:
         top_models = set(all_models.keys()) - to_hide
         # set global models list
         self.models = {m.__name__: m for m in top_models if m.__name__ not in exc_models}
-        user_model: type[User] = self.models['User']
+        user_model: Type[User] = self.models['User']
         pre_save(user_model)(hash_pwd)
 
         Tortoise.init_models([models_module], "models") # for relations
 
-        pm_in = PydanticMeta
-        pm_in.exclude_raw_fields = False
-        pm_in.max_recursion = 0
-        # pm_in.backward_relations = False
-        pm_out = PydanticMeta
-        pm_out.max_recursion = 1
+        schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydanticListModel])} = {k: (m.pyd(), m.pyd(True), m.pyds()) for k, m in self.models.items()}
 
-        def gen_schemas(mdl: type[Model], key: str) -> (type[PydanticModel], type[PydanticModel]):
-            return [
-                # todo: why 'created_at' and 'updated_at' are not excluding from -In schema, cause they are readonly?
-                pydantic_model_creator(mdl, name=key+'-In', meta_override=pm_in, exclude_readonly=True, exclude=('created_at', 'updated_at')),
-                pydantic_model_creator(mdl, name=key, meta_override=pm_out)
-            ]
-
-        schemas: {str: [type[PydanticModel], type[PydanticModel]]} = {k: gen_schemas(m, k) for k, m in self.models.items()}
+        # todo! in schemas[0] - not top User if it overrided in current project models, in schemas[1] - ok
 
         # global user model inject current overriden User type # todo: maybe some refactor?
         oauth.UserSchema = schemas['User'][1]
@@ -94,22 +82,15 @@ class Api:
         for name, schema in schemas.items():
             # in_model = pydantic_model_creator(self.models[name], name='New'+name, exclude_readonly=True).
 
-            def _req2mod(req: Request) -> type[Model]:
+            def _req2mod(req: Request) -> Type[Model]:
                 nam: str = req.scope['path'].split('/')[2]
                 return self.models[nam]
 
-            schema.append(create_model(
-                name+'List',
-                data=(list[schema[1]], ...),
-                total=(int, 1000),
-                __base__=BaseModel,
-            ))
-
-            async def index(request: Request, limit: int = 1000, page: int = 1) -> schema[2]:
+            async def index(request: Request, limit: int = 1000, offset: int = 0) -> schema[2]:
                 mod: Model.__class__ = _req2mod(request)
-                data, total = await mod.pagePyd(limit, page)
+                data = await mod.pagePyd(limit, offset)
                 # total = len(data) if len(data) < limit else await query.count()
-                return {'data': data, 'total': total}  # show all
+                return data # {'data': data, 'total': total}  # show all
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod = _req2mod(request)
@@ -118,8 +99,8 @@ class Api:
                 except DoesNotExist as e:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-            async def upsert(request: Request, obj: schema[0], item_id: int|None = None):
-                mod: type[Model] = obj.model_config['orig_model']
+            async def upsert(request: Request, obj: schema[1], item_id: int|None = None):
+                mod: Type[Model] = obj.model_config['orig_model']
                 obj_dict = obj.model_dump()
                 args = [obj_dict]
                 if item_id:
@@ -146,7 +127,7 @@ class Api:
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', response_model=schema[1]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', response_model=dict),
             ])
-            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[Depends(get_current_user)])
+            self.app.include_router(ar, prefix=self.prefix, tags=[name]) # , dependencies=[Depends(get_current_user)]
 
         # db init
         load_dotenv()
