@@ -20,7 +20,7 @@ dependencies = [
     "passlib[bcrypt]",
     "python-multipart",
 ]
-version = "0.6.15"
+version = "0.6.16"
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"
