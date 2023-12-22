@@ -114,9 +114,9 @@ class Api:
 
             ar = APIRouter(routes=[
                 APIRoute('/'+name, index, methods=['GET'], name=name+' objects list', response_model=schema[2]),
-                APIRoute('/'+name, upsert, methods=['POST'], name=name+' object create', response_model=schema[1]),
+                APIRoute('/'+name, upsert, methods=['POST'], name=name+' object create', response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[0]),
-                APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', response_model=schema[1]),
+                APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', response_model=dict),
             ])
             self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[Depends(get_current_user)])
