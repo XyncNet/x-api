@@ -1,4 +1,5 @@
 import logging
+from functools import reduce
 from os import getenv as env
 from types import ModuleType
 from typing import Annotated, Type
@@ -8,19 +9,16 @@ from fastapi import FastAPI, Depends, Path, HTTPException, Form
 from fastapi.routing import APIRoute, APIRouter
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
-from pydantic import BaseModel, create_model
 from starlette import status
 from starlette.requests import Request
-from tortoise import Tortoise
+from tortoise import Tortoise, ModelMeta
 from tortoise.contrib.pydantic import pydantic_model_creator, PydanticModel, PydanticListModel
 from tortoise.contrib.pydantic.creator import PydanticMeta
 from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
 from tortoise.signals import pre_save
 
-from tortoise_api_model import Model, User
-from tortoise_api_model.model import hash_pwd
-from tortoise_api import oauth
+from tortoise_api_model.model import hash_pwd, Model, User as UserModel
 from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user
 
 
@@ -32,10 +30,10 @@ class Api:
 
     def __init__(
         self,
-        models_module: ModuleType,
+        module: ModuleType,
         debug: bool = False,
         title: str = 'FemtoAPI',
-        exc_models: [str] = [],
+        exc_models: set[str] = set(),
     ):
         """
         Parameters:
@@ -46,30 +44,24 @@ class Api:
             logging.basicConfig(level=logging.DEBUG)
 
         # extract models from module
-        all_models: {Model.__class__: [Model.__class__]} = {model: model.mro() for key in dir(models_module) if isinstance(model := getattr(models_module, key), Model.__class__) and model==model.mro()[0]}
-        # collect parents models for hiding
-        to_hide: set[Model.__class__] = set()
-        [to_hide.update(m[1:]) for m in all_models.values()]
+        models_trees: {Model.__class__: [Model.__class__]} = {mdl: mdl.mro() for key in dir(module) if isinstance(mdl := getattr(module, key), Model.__class__)}
+        # collect not top (bottom) models for removing
+        bottom_models: {Model.__class__} = reduce(lambda x,y: x | set(y[1:]), models_trees.values(), {object}) & set(models_trees)
         # filter only top model names
-        top_models = set(all_models.keys()) - to_hide
+        mm = {m: v for m in dir(module) if isinstance(v:=getattr(module, m), ModelMeta)}
+        [delattr(module, m.__name__) for m in bottom_models if m in mm.values()]
+        top_models = set(models_trees.keys()) - bottom_models
         # set global models list
         self.models = {m.__name__: m for m in top_models if m.__name__ not in exc_models}
-        user_model: Type[User] = self.models['User']
-        pre_save(user_model)(hash_pwd)
+        # pre_save(user_model)(hash_pwd)
 
-        Tortoise.init_models([models_module], "models") # for relations
+        Tortoise.init_models([module], "models") # for relations
 
         schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydanticListModel])} = {k: (m.pyd(), m.pyd(True), m.pyds()) for k, m in self.models.items()}
 
-        # todo! in schemas[0] - not top User if it overrided in current project models, in schemas[1] - ok
-
-        # global user model inject current overriden User type # todo: maybe some refactor?
-        oauth.UserSchema = schemas['User'][1]
-        oauth.UserModel = user_model
-
         # get auth token route
         auth_routes = [
-            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=schemas['User'][1]),
+            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=UserModel.pyd()),
             APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
         ]
 
@@ -123,12 +115,12 @@ class Api:
             ar = APIRouter(routes=[
                 APIRoute('/'+name, index, methods=['GET'], name=name+' objects list', response_model=schema[2]),
                 APIRoute('/'+name, upsert, methods=['POST'], name=name+' object create', response_model=schema[1]),
-                APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[1]),
+                APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', response_model=schema[1]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', response_model=dict),
             ])
-            self.app.include_router(ar, prefix=self.prefix, tags=[name]) # , dependencies=[Depends(get_current_user)]
+            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[Depends(get_current_user)])
 
         # db init
         load_dotenv()
-        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [models_module]}, generate_schemas=debug)
+        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [module]}, generate_schemas=debug)

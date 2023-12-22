@@ -7,11 +7,11 @@ from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2Passwor
 from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
 from starlette import status
-from tortoise.contrib.pydantic import PydanticModel
 from tortoise_api_model.enums import Scope, UserRole
-from tortoise_api_model.model import User, UserStatus
+from tortoise_api_model.model import UserStatus, User as UserModel
 
 # to get a string like this run: openssl rand -hex 32
+
 SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
 EXPIRES = timedelta(days=7)
@@ -28,8 +28,9 @@ class UserCred(BaseModel):
     username: str
     password: str
 
-UserModel = User
-UserSchema: PydanticModel = UserModel.pyd()
+class UserSchema(UserCred):
+    email: str|None = None
+    phone: int|None = None
 
 class Token(BaseModel):
     access_token: str
@@ -44,11 +45,6 @@ oauth2_scheme = OAuth2PasswordBearer(
         Scope.All.name: "Access for not only own items"
     }
 )
-
-
-class InUser(UserCred):
-    email: str | None = None
-    phone: int | None = None
 
 
 # dependency
@@ -101,13 +97,13 @@ scopes = {
 
 
 # api reg endpoint
-async def reg_user(new_user: InUser):
+async def reg_user(new_user: UserSchema):
     data = new_user.model_dump()
     try:
         user: UserModel = await UserModel.create(**data)
     except Exception as e:
         raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
-    return await UserSchema.from_tortoise_orm(user)
+    return await UserModel.pyd().from_tortoise_orm(user)
 
 async def authenticate_user(username: str, password: str) -> tuple[TokenData, UserModel]:
     if user_db := await UserModel.get_or_none(username=username):
@@ -134,5 +130,5 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
             data={"sub": token.username, "scopes": token.scopes},
             expires_delta=EXPIRES,
         )
-        user = await UserModel.pyd().from_tortoise_orm(user_db)
+        user = UserSchema.model_validate(user_db, from_attributes=True)
         return {"access_token": access_token, "token_type": "bearer", "user": user}
