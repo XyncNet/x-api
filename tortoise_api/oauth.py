@@ -35,7 +35,7 @@ class UserSchema(UserCred):
 class Token(BaseModel):
     access_token: str
     token_type: str
-    user: UserSchema
+    user: UserModel.pyd()
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
@@ -118,7 +118,7 @@ async def authenticate_user(username: str, password: str) -> tuple[TokenData, Us
 
 
 # api login endpoint
-async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Annotated[dict, Token]:
+async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
     def gen_access_token(data: dict, expires_delta: timedelta = EXPIRES) -> str:
         to_encode = data.copy()
         to_encode.update({"exp": datetime.utcnow() + expires_delta})
@@ -130,5 +130,5 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
             data={"sub": token.username, "scopes": token.scopes},
             expires_delta=EXPIRES,
         )
-        user = UserSchema.model_validate(user_db, from_attributes=True)
-        return {"access_token": access_token, "token_type": "bearer", "user": user}
+        r = Token.model_validate({"access_token": access_token, "token_type": "bearer", "user": user_db}, from_attributes=True)
+        return r
