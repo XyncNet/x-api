@@ -18,7 +18,7 @@ from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
 from tortoise.signals import pre_save
 
-from tortoise_api_model.model import hash_pwd, Model, User as UserModel
+from tortoise_api_model.model import Model, User as UserModel, UserSchema, UserUpdate
 from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user
 
 
@@ -57,11 +57,11 @@ class Api:
 
         Tortoise.init_models([module], "models") # for relations
 
-        schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydanticListModel])} = {k: (m.pyd(), m.pyd(True), m.pyds()) for k, m in self.models.items()}
+        schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydanticListModel])} = {k: (m.pyd(), UserUpdate if k=='User' else m.pyd(True), m.pyds()) for k, m in self.models.items()}
 
         # get auth token route
         auth_routes = [
-            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=UserModel.pyd()),
+            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=UserSchema),
             APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
         ]
 
@@ -87,12 +87,12 @@ class Api:
             async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod = _req2mod(request)
                 try:
-                    return await mod.pyd().from_queryset_single(mod.get(id=item_id))  # show one
+                    return UserUpdate.model_validate(mod.get(id=item_id), from_attributes=True) if name=='User' else await mod.pyd().from_queryset_single(mod.get(id=item_id))  # show one
                 except DoesNotExist as e:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
             async def upsert(request: Request, obj: schema[1], item_id: int|None = None):
-                mod: Type[Model] = obj.model_config['orig_model']
+                mod: Type[Model] = obj.model_config.get('orig_model', UserModel)
                 obj_dict = obj.model_dump()
                 args = [obj_dict]
                 if item_id:

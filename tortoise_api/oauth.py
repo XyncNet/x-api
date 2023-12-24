@@ -7,8 +7,8 @@ from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2Passwor
 from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
 from starlette import status
-from tortoise_api_model.enums import Scope, UserRole
-from tortoise_api_model.model import UserStatus, User as UserModel
+from tortoise_api_model.enums import Scope, UserRole, UserStatus
+from tortoise_api_model.model import User as UserModel, UserReg, UserSchema
 
 # to get a string like this run: openssl rand -hex 32
 
@@ -24,18 +24,10 @@ class TokenData(BaseModel):
     username: str | None = None
     scopes: list[str] = []
 
-class UserCred(BaseModel):
-    username: str
-    password: str
-
-class UserSchema(UserCred):
-    email: str|None = None
-    phone: int|None = None
-
 class Token(BaseModel):
     access_token: str
     token_type: str
-    user: UserModel.pyd()
+    user: UserSchema
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
@@ -97,13 +89,14 @@ scopes = {
 
 
 # api reg endpoint
-async def reg_user(new_user: UserSchema):
+async def reg_user(new_user: UserReg):
     data = new_user.model_dump()
+    data['password'] = UserModel._cc.hash(data['password'])
     try:
         user: UserModel = await UserModel.create(**data)
     except Exception as e:
         raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
-    return await UserModel.pyd().from_tortoise_orm(user)
+    return UserSchema.model_validate(user, from_attributes=True)
 
 async def authenticate_user(username: str, password: str) -> tuple[TokenData, UserModel]:
     if user_db := await UserModel.get_or_none(username=username):
