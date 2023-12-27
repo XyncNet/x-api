@@ -89,14 +89,15 @@ scopes = {
 
 
 # api reg endpoint
-async def reg_user(new_user: UserReg):
+async def reg_user(new_user: UserReg) -> Token:
     data = new_user.model_dump()
     data['password'] = UserModel._cc.hash(data['password'])
     try:
         user: UserModel = await UserModel.create(**data)
     except Exception as e:
         raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
-    return UserSchema.model_validate(user, from_attributes=True)
+    tok = await login_for_access_token(OAuth2PasswordRequestForm(username=new_user.username, password=new_user.password))
+    return tok
 
 async def authenticate_user(username: str, password: str) -> tuple[TokenData, UserModel]:
     if user_db := await UserModel.get_or_none(username=username):

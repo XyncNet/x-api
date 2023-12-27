@@ -18,7 +18,7 @@ from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
 from tortoise.signals import pre_save
 
-from tortoise_api_model.model import Model, User as UserModel, UserSchema, UserUpdate
+from tortoise_api_model.model import Model, User as UserModel, UserUpdate
 from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user
 
 
@@ -61,7 +61,7 @@ class Api:
 
         # get auth token route
         auth_routes = [
-            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=UserSchema),
+            APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=Token),
             APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
         ]
 
