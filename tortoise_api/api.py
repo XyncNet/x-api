@@ -48,8 +48,8 @@ class Api:
         # collect not top (bottom) models for removing
         bottom_models: {Model.__class__} = reduce(lambda x,y: x | set(y[1:]), models_trees.values(), {object}) & set(models_trees)
         # filter only top model names
-        mm = {m: v for m in dir(module) if isinstance(v:=getattr(module, m), ModelMeta)}
-        [delattr(module, m.__name__) for m in bottom_models if m in mm.values()]
+        # mm = {m: v for m in dir(module) if isinstance(v:=getattr(module, m), ModelMeta)}
+        # [delattr(module, m.__name__) for m in bottom_models if m in mm.values()]
         top_models = set(models_trees.keys()) - bottom_models
         # set global models list
         self.models = {m.__name__: m for m in top_models if m.__name__ not in exc_models}
@@ -113,13 +113,13 @@ class Api:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
 
             ar = APIRouter(routes=[
-                APIRoute('/'+name, index, methods=['GET'], name=name+' objects list', response_model=schema[2]),
+                APIRoute('/'+name, index, methods=['GET'], name=name+' objects list', response_model=schema[2], dependencies=[Depends(get_current_user)]),
                 APIRoute('/'+name, upsert, methods=['POST'], name=name+' object create', response_model=schema[0]),
-                APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[0]),
+                APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[0], dependencies=[Depends(get_current_user)]),
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', response_model=dict),
             ])
-            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[Depends(get_current_user)])
+            self.app.include_router(ar, prefix=self.prefix, tags=[name])
 
         # db init
         load_dotenv()
