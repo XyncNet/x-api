@@ -99,6 +99,16 @@ async def reg_user(new_user: UserReg) -> Token:
     tok = await login_for_access_token(OAuth2PasswordRequestForm(username=new_user.username, password=new_user.password))
     return tok
 
+
+class AuthException(HTTPException):
+    detail: AuthFailReason
+
+    def __init__(
+        self,
+        detail: AuthFailReason,
+    ) -> None:
+        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+
 async def authenticate_user(username: str, password: str) -> tuple[TokenData, UserModel]:
     if user_db := await UserModel.get_or_none(username=username):
         td = TokenData.model_validate(user_db, from_attributes=True)
@@ -108,7 +118,7 @@ async def authenticate_user(username: str, password: str) -> tuple[TokenData, Us
         reason = AuthFailReason.password
     else:
         reason = AuthFailReason.username
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Incorrect {reason.name}")
+    raise AuthException(detail=reason)
 
 
 # api login endpoint

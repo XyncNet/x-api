@@ -91,7 +91,7 @@ class Api:
                 except DoesNotExist as e:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-            async def upsert(request: Request, obj: schema[1], item_id: int|None = None):
+            async def upsert(obj: schema[1], item_id: int|None = None):
                 mod: Type[Model] = obj.model_config.get('orig_model', UserModel)
                 obj_dict = obj.model_dump()
                 args = [obj_dict]
