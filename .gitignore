@@ -1,5 +1,5 @@
 /.idea
 /venv
-/.env
+.env
 /*.egg-info
 /dist

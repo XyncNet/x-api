@@ -19,8 +19,9 @@ dependencies = [
     "python-jose[cryptography]",
     "passlib[bcrypt]",
     "python-multipart",
+    "uvicorn",
 ]
-version = "0.7.2"
+version = "0.7.3"
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"

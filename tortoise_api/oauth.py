@@ -7,7 +7,7 @@ from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2Passwor
 from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
 from starlette import status
-from tortoise_api_model.enums import Scope, UserRole, UserStatus
+from tortoise_api_model.enum import Scope, UserRole, UserStatus
 from tortoise_api_model.model import User as UserModel, UserReg, UserSchema
 
 # to get a string like this run: openssl rand -hex 32
