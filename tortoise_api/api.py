@@ -10,13 +10,13 @@ from fastapi.routing import APIRoute, APIRouter
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
 from starlette.requests import Request
-from tortoise import Tortoise, ModelMeta
-from tortoise.contrib.pydantic import PydanticModel, PydanticListModel
+from tortoise import Tortoise
+from tortoise.contrib.pydantic import PydanticModel
 from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
 
 from tortoise_api_model.model import Model, User as UserModel
-from tortoise_api_model.pydantic import UserUpdate, PydList, In, Out
+from tortoise_api_model.pydantic import UserUpdate, PydList
 
 from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user, write, my
 
@@ -83,7 +83,7 @@ class Api:
                 mod = _req2mod(request)
                 try:
                     q = mod.get(id=item_id)
-                    return UserUpdate.model_validate(q, from_attributes=True) if name=='User' else await mod.pyd('Out').from_queryset_single(q)  # show one
+                    return UserUpdate.model_validate(q, from_attributes=True) if name=='User' else await mod.pyd().from_queryset_single(q)  # show one
                 except DoesNotExist as e:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
@@ -115,7 +115,7 @@ class Api:
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', dependencies=[write], response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=[my], response_model=dict),
             ])
-            self.app.include_router(ar, prefix=self.prefix, tags=[name]) # , dependencies=[Depends(get_current_user)]
+            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[Depends(get_current_user)])
 
         # db init
         load_dotenv()
