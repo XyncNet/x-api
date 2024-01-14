@@ -8,7 +8,8 @@ from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
 from starlette import status
 from tortoise_api_model.enum import Scope, UserRole, UserStatus
-from tortoise_api_model.model import User as UserModel, UserReg, UserSchema
+from tortoise_api_model.model import User as UserModel
+from tortoise_api_model.pydantic import UserSchema, UserReg
 
 # to get a string like this run: openssl rand -hex 32
 
@@ -91,12 +92,11 @@ scopes = {
 # api reg endpoint
 async def reg_user(new_user: UserReg) -> Token:
     data = new_user.model_dump()
-    data['password'] = UserModel._cc.hash(data['password'])
     try:
         user: UserModel = await UserModel.create(**data)
     except Exception as e:
         raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
-    tok = await login_for_access_token(OAuth2PasswordRequestForm(username=new_user.username, password=new_user.password))
+    tok = await login_for_access_token(OAuth2PasswordRequestForm(username=user.username, password=new_user.password))
     return tok
 
 
@@ -113,7 +113,7 @@ async def authenticate_user(username: str, password: str) -> tuple[TokenData, Us
     if user_db := await UserModel.get_or_none(username=username):
         td = TokenData.model_validate(user_db, from_attributes=True)
         td.scopes = scopes[user_db.role]
-        if user_db.vrf_pwd(password):
+        if user_db.pwd_vrf(password):
             return td, user_db
         reason = AuthFailReason.password
     else:
