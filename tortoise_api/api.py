@@ -82,8 +82,7 @@ class Api:
             async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod = _req2mod(request)
                 try:
-                    q = mod.get(id=item_id)
-                    return UserUpdate.model_validate(q, from_attributes=True) if name=='User' else await mod.pyd().from_queryset_single(q)  # show one
+                    return await mod.one(item_id) # show one
                 except DoesNotExist as e:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
