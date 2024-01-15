@@ -3,9 +3,9 @@ from tortoise_api_model import Model
 from tortoise_api_model.model import User
 
 
-class Post(Model):
+class Story(Model):
     id: int = fields.IntField(pk=True)
-    text: str = fields.CharField(4095)
-    user: User = fields.ForeignKeyField('models.User', related_name='posts')
+    txt: str = fields.CharField(4095)
+    user: User = fields.ForeignKeyField('models.User', related_name='stories')
 
-    _name = 'text'
+    _name = 'id'
