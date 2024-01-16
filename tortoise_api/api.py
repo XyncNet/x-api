@@ -96,8 +96,9 @@ class Api:
                     obj_db: Model = await mod.upsert(*args)
                 except IntegrityError as e:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
-                jsn: PydanticModel = await mod.pyd().from_tortoise_orm(obj_db)
-                return jsn
+                # pyd: PydanticModel = await mod.pyd().from_tortoise_orm(obj_db)
+                pyd = await mod.one(obj_db.id) # todo: double request, dirty fix for buildint in topli with recursion=2
+                return pyd
 
             async def delete(req: Request, item_id: int):
                 mod = _req2mod(req)
