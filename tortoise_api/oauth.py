@@ -107,7 +107,7 @@ class AuthException(HTTPException):
         self,
         detail: AuthFailReason,
     ) -> None:
-        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail)
+        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail.name)
 
 async def authenticate_user(username: str, password: str) -> tuple[TokenData, UserModel]:
     if user_db := await UserModel.get_or_none(username=username):
