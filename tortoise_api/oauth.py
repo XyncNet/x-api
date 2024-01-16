@@ -54,10 +54,12 @@ async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         if not username:
+            cred_exc.detail += 'token'
             raise cred_exc
         token_scopes = payload.get("scopes", [])
         token_data = TokenData(scopes=token_scopes, username=username)
     except (JWTError, ValidationError) as e:
+        cred_exc.detail += f': {e}'
         raise cred_exc
     user = await UserModel.get_or_none(username=token_data.username)
     if not user:
