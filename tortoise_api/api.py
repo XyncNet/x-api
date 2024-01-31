@@ -9,6 +9,7 @@ from fastapi.routing import APIRoute, APIRouter
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from tortoise import Tortoise
 from tortoise.contrib.pydantic import PydanticModel
@@ -65,6 +66,13 @@ class Api:
 
         # main app
         self.app = FastAPI(debug=debug, routes=auth_routes, title=title, separate_input_output_schemas=False)
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
         # FastAPICache.init(InMemoryBackend(), expire=600)
 
@@ -115,7 +123,7 @@ class Api:
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', dependencies=[write], response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=[my], response_model=dict),
             ])
-            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[Depends(get_current_user)])
+            self.app.include_router(ar, prefix=self.prefix, tags=[name])
 
         # db init
         load_dotenv()
