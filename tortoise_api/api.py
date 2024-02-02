@@ -61,7 +61,7 @@ class Api:
         # get auth token route
         auth_routes = [
             APIRoute('/register', reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=Token),
-            APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth']),
+            APIRoute('/token', login_for_access_token, methods=['POST'], response_model=Token, tags=['auth'], operation_id='token'),
         ]
 
         # main app
@@ -123,7 +123,7 @@ class Api:
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', dependencies=[write], response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=[my], response_model=dict),
             ])
-            self.app.include_router(ar, prefix=self.prefix, tags=[name])
+            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[Depends(get_current_user)])
 
         # db init
         load_dotenv()
