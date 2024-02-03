@@ -82,9 +82,9 @@ class Api:
                 nam: str = req.scope['path'].split('/')[2]
                 return self.models[nam]
 
-            async def index(request: Request, limit: int = 1000, offset: int = 0) -> schema[2]:
+            async def index(request: Request, limit: int = 1000, offset: int = 0, q: str = None) -> schema[2]:
                 mod: Model.__class__ = _req2mod(request)
-                data = await mod.pagePyd(limit, offset)
+                data = await mod.pagePyd(mod._sorts, limit, offset, q)
                 return data
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
