@@ -6,6 +6,7 @@ from typing import Annotated, Type
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Path, HTTPException
 from fastapi.routing import APIRoute, APIRouter
+from pydantic import BaseModel, ConfigDict
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
@@ -20,6 +21,13 @@ from tortoise_api_model.model import Model, User as UserModel
 from tortoise_api_model.pydantic import UserUpdate, PydList
 
 from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user, write, my
+
+class ListArgs(BaseModel):
+    model_config = ConfigDict(extra='allow')
+    limit: int = 100
+    offset: int = 0
+    sort: str|None = None
+    q: str|None = None
 
 
 class Api:
@@ -82,9 +90,10 @@ class Api:
                 nam: str = req.scope['path'].split('/')[2]
                 return self.models[nam]
 
-            async def index(request: Request, limit: int = 1000, offset: int = 0, q: str = None) -> schema[2]:
+            async def index(request: Request, params: ListArgs) -> schema[2]:
                 mod: Model.__class__ = _req2mod(request)
-                data = await mod.pagePyd(mod._sorts, limit, offset, q)
+                sorts = ([params.sort] if params.sort else [])+mod._sorts
+                data = await mod.pagePyd(sorts, params.limit, params.offset, params.q, **params.model_extra)
                 return data
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
@@ -117,10 +126,10 @@ class Api:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
 
             ar = APIRouter(routes=[
-                APIRoute('/'+name, index, methods=['GET'], name=name+' objects list', response_model=schema[2]),
-                APIRoute('/'+name, upsert, methods=['POST'], name=name+' object create', dependencies=[write], response_model=schema[0]),
+                APIRoute('/'+name, index, methods=['POST'], name=name+' objects list', response_model=schema[2]),
+                APIRoute('/'+name, upsert, methods=['PUT'], name=name+' object create', dependencies=[write], response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[0]),
-                APIRoute('/'+name+'/{item_id}', upsert, methods=['POST'], name=name+' object update', dependencies=[write], response_model=schema[0]),
+                APIRoute('/'+name+'/{item_id}', upsert, methods=['PATCH'], name=name+' object update', dependencies=[write], response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=[my], response_model=dict),
             ])
             self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[Depends(get_current_user)])
