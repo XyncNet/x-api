@@ -1,0 +1,11 @@
+# aiogram
+fastapi
+pytest
+python-dotenv
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+uvicorn
+git+ssh://git@github.com/mixartemev/tortoise-api-model.git
+git+ssh://git@github.com/mixartemev/pydantic.git
+git+ssh://git@github.com/mixartemev/tortoise-orm.git

@@ -17,18 +17,22 @@ SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 ALGORITHM = "HS256"
 EXPIRES = timedelta(days=7)
 
+
 class AuthFailReason(IntEnum):
     username = 1
     password = 2
+
 
 class TokenData(BaseModel):
     username: str | None = None
     scopes: list[str] = []
 
+
 class Token(BaseModel):
     access_token: str
     token_type: str
     user: UserSchema
+
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="token",
@@ -41,7 +45,7 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 
 # dependency
-async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str, Depends(oauth2_scheme)]) -> UserModel:
+async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str | None, Depends(oauth2_scheme)]) -> UserModel:  # , tg_data: [str, ]
     auth_val = "Bearer"
     if security_scopes.scopes:
         auth_val += f' scope="{security_scopes.scope_str}"'
@@ -71,6 +75,7 @@ async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str
             raise cred_exc
     return user
 
+
 # dependency
 async def get_current_active_user(current_user: Annotated[UserModel, Security(get_current_user)]) -> UserModel:
     if current_user.status == UserStatus.Inactive:
@@ -84,10 +89,10 @@ my = Security(get_current_active_user, scopes=[Scope.All.name])
 not_active = Depends(get_current_user)
 
 scopes = {
-    UserRole.Client: [Scope.Read.name], # read only own
-    UserRole.Agent: [Scope.Read.name, Scope.All.name], # read all
-    UserRole.Manager: [Scope.Read.name, Scope.Write.name], # read/write only own
-    UserRole.Admin: [Scope.Read.name, Scope.Write.name, Scope.All.name], # all
+    UserRole.Client: [Scope.Read.name],  # read only own
+    UserRole.Agent: [Scope.Read.name, Scope.All.name],  # read all
+    UserRole.Manager: [Scope.Read.name, Scope.Write.name],  # read/write only own
+    UserRole.Admin: [Scope.Read.name, Scope.Write.name, Scope.All.name],  # all
 }
 
 
@@ -110,6 +115,7 @@ class AuthException(HTTPException):
         detail: AuthFailReason,
     ) -> None:
         super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail.name)
+
 
 async def authenticate_user(username: str, password: str) -> tuple[TokenData, UserModel]:
     if user_db := await UserModel.get_or_none(username=username):

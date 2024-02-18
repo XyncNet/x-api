@@ -20,14 +20,15 @@ from tortoise.exceptions import IntegrityError, DoesNotExist
 from tortoise_api_model.model import Model, User as UserModel
 from tortoise_api_model.pydantic import UserUpdate, PydList
 
-from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user, write, my
+from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user, read, write, my
+
 
 class ListArgs(BaseModel):
     model_config = ConfigDict(extra='allow')
     limit: int = 100
     offset: int = 0
-    sort: str|None = None
-    q: str|None = None
+    sort: str | None = None
+    q: str | None = None
 
 
 class Api:
@@ -37,11 +38,12 @@ class Api:
     prefix = '/v2'
 
     def __init__(
-        self,
-        module: ModuleType,
-        debug: bool = False,
-        title: str = 'FemtoAPI',
-        exc_models: set[str] = set(),
+            self,
+            module: ModuleType,
+            debug: bool = False,
+            title: str = 'FemtoAPI',
+            exc_models: set[str] = set(),
+            lifespan=None
     ):
         """
         Parameters:
@@ -54,7 +56,7 @@ class Api:
         # extract models from module
         models_trees: {Model.__class__: [Model.__class__]} = {mdl: mdl.mro() for key in dir(module) if isinstance(mdl := getattr(module, key), Model.__class__)}
         # collect not top (bottom) models for removing
-        bottom_models: {Model.__class__} = reduce(lambda x,y: x | set(y[1:]), models_trees.values(), {object}) & set(models_trees)
+        bottom_models: {Model.__class__} = reduce(lambda x, y: x | set(y[1:]), models_trees.values(), {object}) & set(models_trees)
         # filter only top model names
         # mm = {m: v for m in dir(module) if isinstance(v:=getattr(module, m), ModelMeta)}
         # [delattr(module, m.__name__) for m in bottom_models if m in mm.values()]
@@ -62,9 +64,9 @@ class Api:
         # set global models list
         self.models = {m.__name__: m for m in top_models if m.__name__ not in exc_models}
 
-        Tortoise.init_models([module], "models") # for relations
+        Tortoise.init_models([module], "models")  # for relations
 
-        schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydList])} = {k: (m.pyd(), UserUpdate if k=='User' else m.pydIn(), m.pydsList()) for k, m in self.models.items()}
+        schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydList])} = {k: (m.pyd(), UserUpdate if k == 'User' else m.pydIn(), m.pydsList()) for k, m in self.models.items()}
 
         # get auth token route
         auth_routes = [
@@ -73,7 +75,7 @@ class Api:
         ]
 
         # main app
-        self.app = FastAPI(debug=debug, routes=auth_routes, title=title, separate_input_output_schemas=False)
+        self.app = FastAPI(debug=debug, routes=auth_routes, title=title, separate_input_output_schemas=False, lifespan=lifespan)
         self.app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -92,18 +94,18 @@ class Api:
 
             async def index(request: Request, params: ListArgs) -> schema[2]:
                 mod: Model.__class__ = _req2mod(request)
-                sorts = ([params.sort] if params.sort else [])+mod._sorts
+                sorts = ([params.sort] if params.sort else []) + mod._sorts
                 data = await mod.pagePyd(sorts, params.limit, params.offset, params.q, **params.model_extra)
                 return data
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod = _req2mod(request)
                 try:
-                    return await mod.one(item_id) # show one
+                    return await mod.one(item_id)  # show one
                 except DoesNotExist as e:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-            async def upsert(obj: schema[1], item_id: int|None = None):
+            async def upsert(obj: schema[1], item_id: int | None = None):
                 mod: Type[Model] = obj.model_config.get('orig_model', UserModel)
                 obj_dict = obj.model_dump()
                 args = [obj_dict]
@@ -114,7 +116,7 @@ class Api:
                 except IntegrityError as e:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
                 # pyd: PydanticModel = await mod.pyd().from_tortoise_orm(obj_db)
-                pyd = await mod.one(obj_db.id) # todo: double request, dirty fix for buildint in topli with recursion=2
+                pyd = await mod.one(obj_db.id)  # todo: double request, dirty fix for buildint in topli with recursion=2
                 return pyd
 
             async def delete(req: Request, item_id: int):
