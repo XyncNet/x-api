@@ -78,7 +78,7 @@ async def get_current_user(security_scopes: SecurityScopes, token: Annotated[str
 
 # dependency
 async def get_current_active_user(current_user: Annotated[UserModel, Security(get_current_user)]) -> UserModel:
-    if current_user.status == UserStatus.Inactive:
+    if current_user.status < UserStatus.test:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
     return current_user
 
