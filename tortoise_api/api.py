@@ -6,7 +6,7 @@ from typing import Annotated, Type
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Path, HTTPException
 from fastapi.routing import APIRoute, APIRouter
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, create_model
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
@@ -27,7 +27,7 @@ class ListArgs(BaseModel):
     model_config = ConfigDict(extra='allow')
     limit: int = 100
     offset: int = 0
-    sort: str | None = None
+    sort: str | None = '-id'
     q: str | None = None
 
 
@@ -92,7 +92,11 @@ class Api:
                 nam: str = req.scope['path'].split('/')[2]
                 return self.models[nam]
 
-            async def index(request: Request, params: ListArgs) -> schema[2]:
+            DynamicListRequestModel = create_model(
+                name+'ListRequest', q=(str, self.models[name]._name), __base__=ListArgs
+            )
+
+            async def index(request: Request, params: DynamicListRequestModel) -> schema[2]:
                 mod: Model.__class__ = _req2mod(request)
                 sorts = ([params.sort] if params.sort else []) + mod._sorts
                 data = await mod.pagePyd(sorts, params.limit, params.offset, params.q, **params.model_extra)
