@@ -12,13 +12,14 @@ from pydantic import BaseModel, ConfigDict, create_model
 from starlette import status
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
+from starlette.types import Lifespan
 from tortoise import Tortoise
 from tortoise.contrib.pydantic import PydanticModel
 from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
 
-from tortoise_api_model.model import Model, User as UserModel
-from tortoise_api_model.pydantic import UserUpdate, PydList
+from tortoise_api_model.model import Model
+from tortoise_api_model.pydantic import PydList
 
 from tortoise_api.oauth import login_for_access_token, Token, get_current_user, reg_user, read, write, my
 
@@ -42,8 +43,8 @@ class Api:
             module: ModuleType,
             debug: bool = False,
             title: str = 'FemtoAPI',
-            exc_models: set[str] = set(),
-            lifespan=None
+            exc_models: set[str] = None,
+            lifespan: Lifespan = None
     ):
         """
         Parameters:
@@ -62,11 +63,11 @@ class Api:
         # [delattr(module, m.__name__) for m in bottom_models if m in mm.values()]
         top_models = set(models_trees.keys()) - bottom_models
         # set global models list
-        self.models = {m.__name__: m for m in top_models if m.__name__ not in exc_models}
+        self.models = {m.__name__: m for m in top_models if m.__name__ not in exc_models or {}}
 
         Tortoise.init_models([module], "models")  # for relations
 
-        schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydList])} = {k: (m.pyd(), UserUpdate if k == 'User' else m.pydIn(), m.pydsList()) for k, m in self.models.items()}
+        schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydList])} = {k: (m.pyd(), m.pydIn(), m.pydsList()) for k, m in self.models.items()}
 
         # get auth token route
         auth_routes = [
@@ -106,11 +107,11 @@ class Api:
                 mod = _req2mod(request)
                 try:
                     return await mod.one(item_id)  # show one
-                except DoesNotExist as e:
+                except DoesNotExist:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
             async def upsert(obj: schema[1], item_id: int | None = None):
-                mod: Type[Model] = obj.model_config.get('orig_model', UserModel)
+                mod: Type[Model] = obj.model_config['orig_model']
                 obj_dict = obj.model_dump()
                 args = [obj_dict]
                 if item_id:
