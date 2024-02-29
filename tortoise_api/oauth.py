@@ -1,7 +1,8 @@
 from datetime import timedelta, datetime
 from enum import IntEnum
 from typing import Annotated
-
+from os import getenv as env
+from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
@@ -11,9 +12,9 @@ from tortoise_api_model.enum import Scope, UserRole, UserStatus
 from tortoise_api_model.model import User as UserModel
 from tortoise_api_model.pydantic import UserSchema, UserReg
 
+load_dotenv()
 # to get a string like this run: openssl rand -hex 32
-
-SECRET_KEY = "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
+SECRET_KEY = env('TOKEN')
 ALGORITHM = "HS256"
 EXPIRES = timedelta(days=7)
 
@@ -21,6 +22,7 @@ EXPIRES = timedelta(days=7)
 class AuthFailReason(IntEnum):
     username = 1
     password = 2
+    signature = 3
 
 
 class TokenData(BaseModel):
@@ -129,13 +131,12 @@ async def authenticate_user(username: str, password: str) -> tuple[TokenData, Us
     raise AuthException(detail=reason)
 
 
+def gen_access_token(data: dict, expires_delta: timedelta = EXPIRES) -> str:
+    return jwt.encode({"exp": datetime.utcnow() + expires_delta, **data}, SECRET_KEY, algorithm=ALGORITHM)
+
+
 # api login endpoint
 async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
-    def gen_access_token(data: dict, expires_delta: timedelta = EXPIRES) -> str:
-        to_encode = data.copy()
-        to_encode.update({"exp": datetime.utcnow() + expires_delta})
-        return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
     token, user_db = await authenticate_user(form_data.username, form_data.password)
     if isinstance(token, TokenData):
         access_token = gen_access_token(

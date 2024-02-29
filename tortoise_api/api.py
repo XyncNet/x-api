@@ -63,7 +63,7 @@ class Api:
         # [delattr(module, m.__name__) for m in bottom_models if m in mm.values()]
         top_models = set(models_trees.keys()) - bottom_models
         # set global models list
-        self.models = {m.__name__: m for m in top_models if m.__name__ not in exc_models or {}}
+        self.models = {m.__name__: m for m in top_models if not exc_models or m.__name__ not in exc_models}
 
         Tortoise.init_models([module], "models")  # for relations
 
