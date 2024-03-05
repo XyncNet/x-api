@@ -102,13 +102,13 @@ class OAuth:
     }
 
     # api reg endpoint
-    async def reg_user(self, new_user: UserReg) -> Token:
-        data = new_user.model_dump()
+    async def reg_user(self, user_reg_input: UserReg) -> Token:
+        data = user_reg_input.model_dump()
         try:
             await self.db_user_model.create(**data)
         except Exception as e:
             raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
-        tok = await self.login_for_access_token(OAuth2PasswordRequestForm(username=new_user.username, password=new_user.password))
+        tok = await self.login_for_access_token(OAuth2PasswordRequestForm(username=user_reg_input.username, password=user_reg_input.password))
         return tok
 
     class AuthException(HTTPException):

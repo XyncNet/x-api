@@ -77,7 +77,7 @@ class Api:
         ) for k, m in self.models.items()}
 
         # get auth token route
-        self.oauth = OAuth(env('SECRET'), self.models['User'])
+        self.oauth = OAuth(env('TOKEN'), self.models['User'])
         auth_routes = [
             APIRoute('/register', self.oauth.reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=self.oauth.Token),
             APIRoute('/token', self.oauth.login_for_access_token, methods=['POST'], response_model=self.oauth.Token, tags=['auth'], operation_id='token'),
