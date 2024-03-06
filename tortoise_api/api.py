@@ -97,10 +97,10 @@ class Api:
 
         # FastAPICache.init(InMemoryBackend(), expire=600)
 
-        read = Security(self.oauth.check_token, scopes=[Scope.Read.name])
-        write = Security(self.oauth.check_token, scopes=[Scope.Write.name])
-        my = Security(self.oauth.check_token, scopes=[Scope.All.name])
-        active = Depends(self.oauth.check_token)
+        self.read = Security(self.oauth.check_token, scopes=[Scope.Read.name])
+        self.write = Security(self.oauth.check_token, scopes=[Scope.Write.name])
+        self.my = Security(self.oauth.check_token, scopes=[Scope.All.name])
+        self.active = Depends(self.oauth.check_token)
 
         # build routes with schemas
         for name, schema in schemas.items():
@@ -149,13 +149,13 @@ class Api:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
 
             ar = APIRouter(routes=[
-                APIRoute('/'+name, index, methods=['POST'], name=name+' objects list', dependencies=[read], response_model=schema[2]),
-                APIRoute('/'+name, upsert, methods=['PUT'], name=name+' object create', dependencies=[write], response_model=schema[0]),
+                APIRoute('/'+name, index, methods=['POST'], name=name+' objects list', dependencies=[self.read], response_model=schema[2]),
+                APIRoute('/'+name, upsert, methods=['PUT'], name=name+' object create', dependencies=[self.write], response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[0]),
-                APIRoute('/'+name+'/{item_id}', upsert, methods=['PATCH'], name=name+' object update', dependencies=[write, my], response_model=schema[0]),
-                APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=[my], response_model=dict),
+                APIRoute('/'+name+'/{item_id}', upsert, methods=['PATCH'], name=name+' object update', dependencies=[self.write, self.my], response_model=schema[0]),
+                APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=[self.my], response_model=dict),
             ])
-            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[active])
+            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[self.active])
 
         # db init
         register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [module]}, generate_schemas=debug)

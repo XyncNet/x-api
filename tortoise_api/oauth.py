@@ -81,7 +81,7 @@ class OAuth:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
         for scope in security_scopes.scopes:
             if scope not in token_data.scopes:
-                cred_exc.detail = f'Not enough permissions. Need "{scope}"'
+                cred_exc.detail = f"Not enough permissions. Need `{scope}`"
                 raise cred_exc
 
     role_scopes_map = {
