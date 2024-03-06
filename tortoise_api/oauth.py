@@ -1,7 +1,7 @@
 from datetime import timedelta, datetime
 from enum import IntEnum
 from typing import Annotated
-from fastapi import Depends, HTTPException, Security
+from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
@@ -17,30 +17,30 @@ class AuthFailReason(IntEnum):
     signature = 3
 
 
+class AuthType(IntEnum):
+    pwd = 1
+    tg = 2
+
+
+class TokenData(BaseModel):
+    username: str | None = None
+    scopes: list[str] = []
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserSchema
+
+
 class OAuth:
     ALGORITHM = "HS256"
     EXPIRES = timedelta(days=7)
 
-    class AuthType(IntEnum):
-        pwd = 1
-        tg = 2
-
-    db_user_model: Model
-    auth_type: AuthType
-
-    def __init__(self, secret: str, db_user_model: Model = User, auth_type: AuthType = AuthType.pwd):
+    def __init__(self, secret: str, db_user_model: type[User] = User, auth_type: AuthType = AuthType.pwd):
         self.secret: str = secret
-        self.db_user_model = db_user_model
-        self.auth_type = auth_type
-
-    class TokenData(BaseModel):
-        username: str | None = None
-        scopes: list[str] = []
-
-    class Token(BaseModel):
-        access_token: str
-        token_type: str
-        user: UserSchema
+        self.db_user_model: type[User] = db_user_model
+        self.auth_type: AuthType = auth_type
 
     oauth2_scheme = OAuth2PasswordBearer(
         tokenUrl="token",
@@ -52,7 +52,7 @@ class OAuth:
     )
 
     # dependency
-    async def get_current_user(self, security_scopes: SecurityScopes, token: Annotated[str | None, Depends(oauth2_scheme)]) -> Model:  # , tg_data: [str, ]
+    async def check_token(self, security_scopes: SecurityScopes, token: Annotated[str | None, Depends(oauth2_scheme)]):  # , tg_data: [str, ]
         auth_val = "Bearer"
         if security_scopes.scopes:
             auth_val += f' scope="{security_scopes.scope_str}"'
@@ -68,33 +68,23 @@ class OAuth:
                 cred_exc.detail += 'token'
                 raise cred_exc
             token_scopes = payload.get("scopes", [])
-            token_data = self.TokenData(scopes=token_scopes, username=username)
+            token_data = TokenData(scopes=token_scopes, username=username)
         except (JWTError, ValidationError) as e:
             cred_exc.detail += f': {e}'
             raise cred_exc
-        user = await self.db_user_model.get_or_none(username=token_data.username)
-        if not user:
+        # noinspection PyTypeChecker
+        user_status: UserStatus | None = await self.db_user_model.get_or_none(username=token_data.username).values_list('status', flat=True)
+        if not user_status:
             cred_exc.detail = 'User not found'
             raise cred_exc
+        elif user_status < UserStatus.test:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
         for scope in security_scopes.scopes:
             if scope not in token_data.scopes:
                 cred_exc.detail = f'Not enough permissions. Need "{scope}"'
                 raise cred_exc
-        return user
 
-    # dependency
-    @staticmethod
-    async def get_current_active_user(current_user: Annotated[Model, Security(get_current_user)]) -> Model:
-        if current_user.status < UserStatus.test:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
-        return current_user
-
-    read = Security(get_current_active_user, scopes=[Scope.Read.name])
-    write = Security(get_current_active_user, scopes=[Scope.Write.name])
-    my = Security(get_current_active_user, scopes=[Scope.All.name])
-    not_active = Depends(get_current_user)
-
-    scopes = {
+    role_scopes_map = {
         UserRole.Client: [Scope.Read.name],  # read only own
         UserRole.Agent: [Scope.Read.name, Scope.All.name],  # read all
         UserRole.Manager: [Scope.Read.name, Scope.Write.name],  # read/write only own
@@ -122,8 +112,8 @@ class OAuth:
 
     async def authenticate_user(self, username: str, password: str) -> tuple[TokenData, Model]:
         if user_db := await self.db_user_model.get_or_none(username=username):
-            td = self.TokenData.model_validate(user_db, from_attributes=True)
-            td.scopes = self.scopes[user_db.role]
+            td = TokenData.model_validate(user_db, from_attributes=True)
+            td.scopes = self.role_scopes_map[user_db.role]
             if user_db.pwd_vrf(password):
                 return td, user_db
             reason = AuthFailReason.password
@@ -137,10 +127,10 @@ class OAuth:
     # api login endpoint
     async def login_for_access_token(self, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
         token, user_db = await self.authenticate_user(form_data.username, form_data.password)
-        if isinstance(token, self.TokenData):
+        if isinstance(token, TokenData):
             access_token = self.gen_access_token(
                 data={"sub": token.username, "scopes": token.scopes},
                 expires_delta=self.EXPIRES,
             )
-            r = self.Token.model_validate({"access_token": access_token, "token_type": "bearer", "user": user_db}, from_attributes=True)
+            r = Token.model_validate({"access_token": access_token, "token_type": "bearer", "user": user_db}, from_attributes=True)
             return r

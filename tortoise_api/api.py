@@ -4,7 +4,7 @@ from os import getenv as env
 from types import ModuleType
 from typing import Annotated, Type
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, Path, HTTPException
+from fastapi import FastAPI, Depends, Path, HTTPException, Security
 from fastapi.routing import APIRoute, APIRouter
 from pydantic import BaseModel, ConfigDict, create_model
 # from fastapi_cache import FastAPICache
@@ -17,11 +17,12 @@ from tortoise import Tortoise, ModelMeta
 from tortoise.contrib.pydantic import PydanticModel
 from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
+from tortoise_api_model.enum import Scope
 
 from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import PydList
 
-from tortoise_api.oauth import OAuth
+from tortoise_api.oauth import OAuth, Token
 
 
 class ListArgs(BaseModel):
@@ -79,12 +80,13 @@ class Api:
         # get auth token route
         self.oauth = OAuth(env('TOKEN'), self.models['User'])
         auth_routes = [
-            APIRoute('/register', self.oauth.reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=self.oauth.Token),
-            APIRoute('/token', self.oauth.login_for_access_token, methods=['POST'], response_model=self.oauth.Token, tags=['auth'], operation_id='token'),
+            APIRoute('/register', self.oauth.reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=Token),
+            APIRoute('/token', self.oauth.login_for_access_token, methods=['POST'], response_model=Token, tags=['auth'], operation_id='token'),
         ]
 
         # main app
         self.app = FastAPI(debug=debug, routes=auth_routes, title=title, separate_input_output_schemas=False, lifespan=lifespan)
+        # noinspection PyTypeChecker
         self.app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -94,6 +96,11 @@ class Api:
         )
 
         # FastAPICache.init(InMemoryBackend(), expire=600)
+
+        read = Security(self.oauth.check_token, scopes=[Scope.Read.name])
+        write = Security(self.oauth.check_token, scopes=[Scope.Write.name])
+        my = Security(self.oauth.check_token, scopes=[Scope.All.name])
+        active = Depends(self.oauth.check_token)
 
         # build routes with schemas
         for name, schema in schemas.items():
@@ -135,19 +142,20 @@ class Api:
             async def delete(req: Request, item_id: int):
                 mod = _req2mod(req)
                 try:
+                    # noinspection PyUnresolvedReferences
                     r = await mod.get(id=item_id).delete()
                     return {'deleted': r}
                 except Exception as e:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
 
             ar = APIRouter(routes=[
-                APIRoute('/'+name, index, methods=['POST'], name=name+' objects list', response_model=schema[2]),
-                APIRoute('/'+name, upsert, methods=['PUT'], name=name+' object create', response_model=schema[0]),
+                APIRoute('/'+name, index, methods=['POST'], name=name+' objects list', dependencies=[read], response_model=schema[2]),
+                APIRoute('/'+name, upsert, methods=['PUT'], name=name+' object create', dependencies=[write], response_model=schema[0]),
                 APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[0]),
-                APIRoute('/'+name+'/{item_id}', upsert, methods=['PATCH'], name=name+' object update', dependencies=[self.oauth.write], response_model=schema[0]),
-                APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=[self.oauth.my], response_model=dict),
+                APIRoute('/'+name+'/{item_id}', upsert, methods=['PATCH'], name=name+' object update', dependencies=[write, my], response_model=schema[0]),
+                APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=[my], response_model=dict),
             ])
-            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[Depends(self.oauth.get_current_user)])
+            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[active])
 
         # db init
         register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [module]}, generate_schemas=debug)
