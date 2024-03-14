@@ -6,6 +6,9 @@ from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2Passwor
 from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
 from starlette import status
+from starlette.authentication import AuthenticationBackend, AuthCredentials, SimpleUser, AuthenticationError
+from starlette.middleware.authentication import AuthenticationMiddleware
+from starlette.requests import HTTPConnection
 from tortoise_api_model.enum import Scope, UserRole, UserStatus
 from tortoise_api_model.model import Model, User
 from tortoise_api_model.pydantic import UserSchema, UserReg
@@ -23,6 +26,7 @@ class AuthType(IntEnum):
 
 
 class TokenData(BaseModel):
+    id: int
     username: str | None = None
     scopes: list[str] = []
 
@@ -31,6 +35,14 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     user: UserSchema
+
+
+class AuthUser(SimpleUser):
+    id: int
+
+    def __init__(self, uid: int, username: str) -> None:
+        super().__init__(username)
+        self.id = uid
 
 
 class OAuth:
@@ -51,6 +63,24 @@ class OAuth:
         }
     )
 
+    async def authenticate(self, conn: HTTPConnection) -> tuple[AuthCredentials, SimpleUser] | None:
+        if "Authorization" not in conn.headers:
+            return
+
+        auth = conn.headers["Authorization"]
+        try:
+            scheme, credentials = auth.split()
+            if scheme.lower() != 'bearer':
+                return
+            payload = jwt.decode(credentials, self.secret, algorithms=[self.ALGORITHM])
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise AuthenticationError('Invalid basic auth credentials')
+
+        uid: int = payload.get("id")
+        username: str = payload.get("sub")
+        token_scopes = payload.get("scopes", [])
+        return AuthCredentials(token_scopes), AuthUser(uid, username)
+
     # dependency
     async def check_token(self, security_scopes: SecurityScopes, token: Annotated[str | None, Depends(oauth2_scheme)]):  # , tg_data: [str, ]
         auth_val = "Bearer"
@@ -64,11 +94,12 @@ class OAuth:
         try:
             payload = jwt.decode(token, self.secret, algorithms=[self.ALGORITHM])
             username: str = payload.get("sub")
-            if not username:
+            uid: str = payload.get("id")
+            if not username or not uid:
                 cred_exc.detail += 'token'
                 raise cred_exc
             token_scopes = payload.get("scopes", [])
-            token_data = TokenData(scopes=token_scopes, username=username)
+            token_data = TokenData(id=uid, scopes=token_scopes, username=username)
         except (JWTError, ValidationError) as e:
             cred_exc.detail += f': {e}'
             raise cred_exc
@@ -86,8 +117,8 @@ class OAuth:
 
     role_scopes_map = {
         UserRole.Client: [Scope.Read.name],  # read only own
-        UserRole.Agent: [Scope.Read.name, Scope.All.name],  # read all
-        UserRole.Manager: [Scope.Read.name, Scope.Write.name],  # read/write only own
+        UserRole.Agent: [Scope.Read.name, Scope.Write.name],  # read/write only own
+        UserRole.Manager: [Scope.Read.name, Scope.All.name],  # read all
         UserRole.Admin: [Scope.Read.name, Scope.Write.name, Scope.All.name],  # all
     }
 
@@ -129,7 +160,7 @@ class OAuth:
         token, user_db = await self.authenticate_user(form_data.username, form_data.password)
         if isinstance(token, TokenData):
             access_token = self.gen_access_token(
-                data={"sub": token.username, "scopes": token.scopes},
+                data={"id": token.id, "sub": token.username, "scopes": token.scopes},
                 expires_delta=self.EXPIRES,
             )
             r = Token.model_validate({"access_token": access_token, "token_type": "bearer", "user": user_db}, from_attributes=True)

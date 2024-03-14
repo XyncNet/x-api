@@ -1,4 +1,5 @@
 import models
 from tortoise_api import Api
 
-app = Api(models, True).app
+api = Api(models, True)
+api.gen_routes()

@@ -6,10 +6,11 @@ from typing import Annotated, Type
 from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Path, HTTPException, Security
 from fastapi.routing import APIRoute, APIRouter
-from pydantic import BaseModel, ConfigDict, create_model
+from pydantic import BaseModel, ConfigDict
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
+from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.types import Lifespan
@@ -18,7 +19,6 @@ from tortoise.contrib.pydantic import PydanticModel
 from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
 from tortoise_api_model.enum import Scope
-
 from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import PydList
 
@@ -35,7 +35,9 @@ class ListArgs(BaseModel):
 
 class Api:
     app: FastAPI
+    module: ModuleType
     models: {str: Model}
+    oauth: OAuth
     redis = None
     prefix = '/v2'
 
@@ -45,8 +47,7 @@ class Api:
             debug: bool = False,
             title: str = 'FemtoAPI',
             exc_models: set[str] = None,
-            lifespan: Lifespan = None,
-            tg_auth: bool = False
+            lifespan: Lifespan = None
     ):
         """
         Parameters:
@@ -55,30 +56,22 @@ class Api:
         """
         load_dotenv()
 
+        self.title = title
         if debug:
+            self.debug = True
             logging.basicConfig(level=logging.DEBUG)
 
-        # extract models from module
-        models_trees: {Model.__class__: [Model.__class__]} = {mdl: mdl.mro() for key in dir(module) if isinstance(mdl := getattr(module, key), Model.__class__)}
-        # collect not top (bottom) models for removing
-        bottom_models: {Model.__class__} = reduce(lambda x, y: x | set(y[1:]), models_trees.values(), {object}) & set(models_trees)
-        # filter only top model names
-        mm = {m: v for m in dir(module) if isinstance(v := getattr(module, m), ModelMeta)}
-        [delattr(module, n) for n, m in mm.items() if m in bottom_models]
-        top_models = set(models_trees.keys()) - bottom_models
-        # set global models list
-        self.models = {m.__name__: m for m in top_models if not exc_models or m.__name__ not in exc_models}
+        # self.module =
+        self.set_models(module, exc_models)
 
-        Tortoise.init_models([module], "models")  # for relations
-
-        schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydList])} = {k: (
-            m.pyd(),
-            m.pydIn(),
-            m.pydsList()
-        ) for k, m in self.models.items()}
+        self.oauth = OAuth(env('TOKEN'), self.models['User'])
+        # todo: move it to oauth.py
+        self.read = Security(self.oauth.check_token, scopes=[Scope.Read.name])
+        self.write = Security(self.oauth.check_token, scopes=[Scope.Write.name])
+        self.my = Security(self.oauth.check_token, scopes=[Scope.All.name])
+        self.active = Depends(self.oauth.check_token)
 
         # get auth token route
-        self.oauth = OAuth(env('TOKEN'), self.models['User'])
         auth_routes = [
             APIRoute('/register', self.oauth.reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=Token),
             APIRoute('/token', self.oauth.login_for_access_token, methods=['POST'], response_model=Token, tags=['auth'], operation_id='token'),
@@ -94,13 +87,34 @@ class Api:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+        # noinspection PyTypeChecker
+        self.app.add_middleware(AuthenticationMiddleware, backend=self.oauth)
 
         # FastAPICache.init(InMemoryBackend(), expire=600)
+        # db init
+        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [self.module]}, generate_schemas=debug)
 
-        self.read = Security(self.oauth.check_token, scopes=[Scope.Read.name])
-        self.write = Security(self.oauth.check_token, scopes=[Scope.Write.name])
-        self.my = Security(self.oauth.check_token, scopes=[Scope.All.name])
-        self.active = Depends(self.oauth.check_token)
+    def set_models(self, modul, excm: set[str]):
+        # extract models from module
+        models_trees: {Model.__class__: [Model.__class__]} = {mdl: mdl.mro() for key in dir(modul) if isinstance(mdl := getattr(modul, key), Model.__class__)}
+        # collect not top (bottom) models for removing
+        bottom_models: {Model.__class__} = reduce(lambda x, y: x | set(y[1:]), models_trees.values(), {object}) & set(models_trees)
+        # filter only top model names
+        mm = {m: v for m in dir(modul) if isinstance(v := getattr(modul, m), ModelMeta)}
+        [delattr(modul, n) for n, m in mm.items() if m in bottom_models]
+        self.module = modul
+        top_models = set(models_trees.keys()) - bottom_models
+        # set global models list
+        self.models = {m.__name__: m for m in top_models if not excm or m.__name__ not in excm}
+
+    def gen_routes(self):
+        Tortoise.init_models([self.module], "models")  # for relations
+
+        schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydList])} = {k: (
+            m.pyd(),
+            m.pydIn(),
+            m.pydsList()
+        ) for k, m in self.models.items()}
 
         # build routes with schemas
         for name, schema in schemas.items():
@@ -108,20 +122,18 @@ class Api:
                 nam: str = req.scope['path'].split('/')[2]
                 return self.models[nam]
 
-            DynamicListRequestModel = create_model(
-                name+'ListRequest', q=(str, ''), __base__=ListArgs
-            )
-
-            async def index(request: Request, params: DynamicListRequestModel) -> schema[2]:
+            async def index(request: Request, params: ListArgs) -> schema[2]:
                 mod: Model.__class__ = _req2mod(request)
                 sorts = [params.sort] if params.sort else mod._sorts
-                data = await mod.pagePyd(sorts, params.limit, params.offset, params.q, **params.model_extra)
+                owner: int | None = Scope.All.name not in request.auth.scopes and request.user.id
+                data = await mod.pagePyd(sorts, params.limit, params.offset, params.q, owner, **params.model_extra)
                 return data
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod = _req2mod(request)
+                owner: int | None = Scope.All.name not in request.auth.scopes and request.user.id
                 try:
-                    return await mod.one(item_id)  # show one
+                    return await mod.one(item_id, owner)  # show one
                 except DoesNotExist:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
@@ -156,6 +168,3 @@ class Api:
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=[self.my], response_model=dict),
             ])
             self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[self.active])
-
-        # db init
-        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [module]}, generate_schemas=debug)
