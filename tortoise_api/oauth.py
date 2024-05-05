@@ -1,6 +1,7 @@
 from datetime import timedelta, datetime
 from enum import IntEnum
 from typing import Annotated
+from aiogram.utils.web_app import WebAppUser, safe_parse_webapp_init_data
 from fastapi import Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
@@ -10,8 +11,11 @@ from starlette.authentication import AuthenticationBackend, AuthCredentials, Sim
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.requests import HTTPConnection
 from tortoise_api_model.enum import Scope, UserRole, UserStatus
-from tortoise_api_model.model import Model, User
-from tortoise_api_model.pydantic import UserSchema, UserReg
+from tortoise_api_model.model import Model
+from tortoise_api_model.pydantic import UserReg, UserSchema
+from xync_schema.models import User
+
+from tortoise_api.loader import TOKEN, user_upsert
 
 
 class AuthFailReason(IntEnum):
@@ -63,23 +67,39 @@ class OAuth:
         }
     )
 
+    async def get_token_for_tg(self, tg_user: WebAppUser) -> Token:
+        user: User
+        user, cr = await user_upsert(tg_user)
+        access_token = self.gen_access_token(
+            data={"sub": tg_user.username or str(tg_user.id), "id": tg_user.id,
+                  "scopes": self.role_scopes_map[user.role]},
+            expires_delta=self.EXPIRES,
+        )
+        auth_user: UserSchema = UserSchema.model_validate(user, from_attributes=True)
+        return Token.model_validate(
+            {"access_token": access_token, "token_type": "bearer", "user": auth_user},
+            from_attributes=True
+        )
+
     async def authenticate(self, conn: HTTPConnection) -> tuple[AuthCredentials, SimpleUser] | None:
-        if "Authorization" not in conn.headers:
+        if "Authorization" not in conn.headers or not (auth:=conn.headers["Authorization"]):
             return
 
-        auth = conn.headers["Authorization"]
-        try:
-            scheme, credentials = auth.split()
-            if scheme.lower() != 'bearer':
-                return
+        # try:
+        scheme, credentials = auth.split()
+        if scheme.lower() == 'tgdata':
+            tgData = safe_parse_webapp_init_data(TOKEN, credentials)
+            scheme = 'bearer'
+            credentials = (await self.get_token_for_tg(tgData.user)).access_token
+        if scheme.lower() == 'bearer':
             payload = jwt.decode(credentials, self.secret, algorithms=[self.ALGORITHM])
-        except (ValueError, UnicodeDecodeError) as exc:
-            raise AuthenticationError('Invalid basic auth credentials')
-
-        uid: int = payload.get("id")
-        username: str = payload.get("sub")
-        token_scopes = payload.get("scopes", [])
-        return AuthCredentials(token_scopes), AuthUser(uid, username)
+            uid: int = payload.get("id")
+            username: str = payload.get("sub")
+            token_scopes = payload.get("scopes", [])
+            return AuthCredentials(token_scopes), AuthUser(uid, username)
+        # except Exception as exc:
+        #     print(exc)
+        #     raise AuthenticationError('Invalid auth credentials')
 
     # dependency
     async def check_token(self, security_scopes: SecurityScopes, token: Annotated[str | None, Depends(oauth2_scheme)]):  # , tg_data: [str, ]
@@ -94,7 +114,7 @@ class OAuth:
         try:
             payload = jwt.decode(token, self.secret, algorithms=[self.ALGORITHM])
             username: str = payload.get("sub")
-            uid: str = payload.get("id")
+            uid: int = payload.get("id")
             if not username or not uid:
                 cred_exc.detail += 'token'
                 raise cred_exc

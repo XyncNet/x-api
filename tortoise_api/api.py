@@ -1,9 +1,7 @@
 import logging
 from functools import reduce
-from os import getenv as env
 from types import ModuleType
 from typing import Annotated, Type
-from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, Path, HTTPException, Security
 from fastapi.routing import APIRoute, APIRouter
 from pydantic import BaseModel, ConfigDict
@@ -22,6 +20,7 @@ from tortoise_api_model.enum import Scope
 from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import PydList
 
+from tortoise_api.loader import TOKEN, DB_URL
 from tortoise_api.oauth import OAuth, Token
 
 
@@ -54,8 +53,6 @@ class Api:
             debug: Debug SQL queries, api requests
             # auth_provider: Authentication Provider
         """
-        load_dotenv()
-
         self.title = title
         if debug:
             self.debug = True
@@ -64,7 +61,7 @@ class Api:
         # self.module =
         self.set_models(module, exc_models)
 
-        self.oauth = OAuth(env('TOKEN'), self.models['User'])
+        self.oauth = OAuth(TOKEN, self.models['User'])
         # todo: move it to oauth.py
         self.read = Security(self.oauth.check_token, scopes=[Scope.Read.name])
         self.write = Security(self.oauth.check_token, scopes=[Scope.Write.name])
@@ -92,7 +89,7 @@ class Api:
 
         # FastAPICache.init(InMemoryBackend(), expire=600)
         # db init
-        register_tortoise(self.app, db_url=env("DB_URL"), modules={"models": [self.module]}, generate_schemas=debug)
+        register_tortoise(self.app, db_url=DB_URL, modules={"models": [self.module]}, generate_schemas=debug)
 
     def set_models(self, modul, excm: set[str]):
         # extract models from module
@@ -125,7 +122,7 @@ class Api:
             async def index(request: Request, params: ListArgs) -> schema[2]:
                 mod: Model.__class__ = _req2mod(request)
                 sorts = [params.sort] if params.sort else mod._sorts
-                owner: int | None = Scope.All.name not in request.auth.scopes and request.user.id
+                owner: int | None = request.user.id if Scope.All.name not in request.auth.scopes else None
                 data = await mod.pagePyd(sorts, params.limit, params.offset, params.q, owner, **params.model_extra)
                 return data
 
