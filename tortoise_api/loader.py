@@ -11,7 +11,7 @@ DB_URL = env('DB_URL')
 
 
 async def user_upsert(u: TgUser | WebAppUser, status: UserStatus = None) -> (User, bool):
-    pic = (gpp := await u.get_profile_photos(0, 1)).photos and gpp.photos[0][-1].file_unique_id if type(u) is TgUser else (u.photo_url[0] if u.photo_url else None)
+    pic = (gpp := await u.get_profile_photos(0, 1)).photos and gpp.photos[0][-1].file_unique_id if type(u) is TgUser else u.photo_url  # (u.photo_url[0] if u.photo_url else None)
     udf = {'username': u.username or u.id, 'first_name': u.first_name, 'last_name': u.last_name, 'status': UserStatus.MEMBER, 'lang': u.language_code and Lang[u.language_code], 'pic': pic}
     if status:
         udf.update({'status': status})

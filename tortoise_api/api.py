@@ -70,7 +70,7 @@ class Api:
 
         # get auth token route
         auth_routes = [
-            APIRoute('/register', self.oauth.reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=Token),
+            APIRoute('/register', self.oauth.reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=Token, operation_id='register'),
             APIRoute('/token', self.oauth.login_for_access_token, methods=['POST'], response_model=Token, tags=['auth'], operation_id='token'),
         ]
 
@@ -157,11 +157,13 @@ class Api:
                 except Exception as e:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
 
+            perms: tuple[bool,bool,bool] = schema[0].model_config['orig_model']._permissions
+            upd_perm = tmp if (tmp := list({self.write if perms[1] else None, self.my if perms[2] else None}))[0] else None
             ar = APIRouter(routes=[
-                APIRoute('/'+name, index, methods=['POST'], name=name+' objects list', dependencies=[self.read], response_model=schema[2]),
-                APIRoute('/'+name, upsert, methods=['PUT'], name=name+' object create', dependencies=[self.write], response_model=schema[0]),
-                APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', response_model=schema[0]),
-                APIRoute('/'+name+'/{item_id}', upsert, methods=['PATCH'], name=name+' object update', dependencies=[self.write, self.my], response_model=schema[0]),
-                APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=[self.my], response_model=dict),
+                APIRoute('/'+name, index, methods=['POST'], name=name+' objects list', dependencies=[self.read] if perms[0] else None, response_model=schema[2], operation_id=f'get{name}List'),
+                APIRoute('/'+name, upsert, methods=['PUT'], name=name+' object create', dependencies=[self.write] if perms[1] else None, response_model=schema[0], operation_id=f'new{name}'),
+                APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', dependencies=[self.write] if perms[2] else None, response_model=schema[0], operation_id=f'get{name}'),
+                APIRoute('/'+name+'/{item_id}', upsert, methods=['PATCH'], name=name+' object update', dependencies=upd_perm, response_model=schema[0], operation_id=f'upd{name}'),
+                APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=upd_perm, response_model=dict, operation_id=f'del{name}'),
             ])
-            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[self.active])
+            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[self.active] if perms[0] and perms[1] and perms[2] else None)
