@@ -82,7 +82,7 @@ class OAuth:
         )
 
     async def authenticate(self, conn: HTTPConnection) -> tuple[AuthCredentials, SimpleUser] | None:
-        if "Authorization" not in conn.headers or not (auth:=conn.headers["Authorization"]):
+        if "Authorization" not in conn.headers or not (auth := conn.headers["Authorization"]):
             return
 
         # try:
@@ -92,7 +92,14 @@ class OAuth:
             scheme = 'bearer'
             credentials = (await self.get_token_for_tg(tgData.user)).access_token
         if scheme.lower() == 'bearer':
-            payload = jwt.decode(credentials, self.secret, algorithms=[self.ALGORITHM])
+            try:
+                payload = jwt.decode(credentials, self.secret, algorithms=[self.ALGORITHM])
+            except (JWTError, ValidationError) as e:
+                raise HTTPException(
+                    status_code=status.HTTP_205_RESET_CONTENT,
+                    detail="Could not validate credentials",
+                    headers={"Set-Cookie": 'access_token='},
+                )
             uid: int = payload.get("id")
             username: str = payload.get("sub")
             token_scopes = payload.get("scopes", [])
@@ -113,16 +120,16 @@ class OAuth:
         )
         try:
             payload = jwt.decode(token, self.secret, algorithms=[self.ALGORITHM])
-            username: str = payload.get("sub")
-            uid: int = payload.get("id")
-            if not username or not uid:
-                cred_exc.detail += 'token'
-                raise cred_exc
-            token_scopes = payload.get("scopes", [])
-            token_data = TokenData(id=uid, scopes=token_scopes, username=username)
         except (JWTError, ValidationError) as e:
             cred_exc.detail += f': {e}'
             raise cred_exc
+        username: str = payload.get("sub")
+        uid: int = payload.get("id")
+        if not username or not uid:
+            cred_exc.detail += 'token'
+            raise cred_exc
+        token_scopes = payload.get("scopes", [])
+        token_data = TokenData(id=uid, scopes=token_scopes, username=username)
         # noinspection PyTypeChecker
         user_status: UserStatus | None = await self.db_user_model.get_or_none(username=token_data.username).values_list('status', flat=True)
         if not user_status:
