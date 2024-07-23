@@ -7,8 +7,7 @@ from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2Passwor
 from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
 from starlette import status
-from starlette.authentication import AuthenticationBackend, AuthCredentials, SimpleUser, AuthenticationError
-from starlette.middleware.authentication import AuthenticationMiddleware
+from starlette.authentication import AuthCredentials, SimpleUser, AuthenticationError, AuthenticationBackend
 from starlette.requests import HTTPConnection
 from tortoise_api_model.enum import Scope, UserRole, UserStatus
 from tortoise_api_model.model import Model
@@ -49,8 +48,7 @@ class AuthUser(SimpleUser):
         self.id = uid
 
 
-class OAuth:
-    ALGORITHM = "HS256"
+class OAuth(AuthenticationBackend):
     EXPIRES = timedelta(days=7)
 
     def __init__(self, secret: str, db_user_model: type[User] = User, auth_type: AuthType = AuthType.pwd):
@@ -93,13 +91,9 @@ class OAuth:
             credentials = (await self.get_token_for_tg(tgData.user)).access_token
         if scheme.lower() == 'bearer':
             try:
-                payload = jwt.decode(credentials, self.secret, algorithms=[self.ALGORITHM])
+                payload = jwt.decode(credentials, self.secret, algorithms=["HS256"])
             except (JWTError, ValidationError) as e:
-                raise HTTPException(
-                    status_code=status.HTTP_205_RESET_CONTENT,
-                    detail="Could not validate credentials",
-                    headers={"Set-Cookie": 'access_token='},
-                )
+                raise AuthenticationError()
             uid: int = payload.get("id")
             username: str = payload.get("sub")
             token_scopes = payload.get("scopes", [])
@@ -119,7 +113,7 @@ class OAuth:
             headers={"WWW-Authenticate": auth_val},
         )
         try:
-            payload = jwt.decode(token, self.secret, algorithms=[self.ALGORITHM])
+            payload = jwt.decode(token, self.secret, algorithms=["HS256"])
         except (JWTError, ValidationError) as e:
             cred_exc.detail += f': {e}'
             raise cred_exc
@@ -180,7 +174,7 @@ class OAuth:
         raise self.AuthException(detail=reason)
 
     def gen_access_token(self, data: dict, expires_delta: timedelta = EXPIRES) -> str:
-        return jwt.encode({"exp": datetime.utcnow() + expires_delta, **data}, self.secret, algorithm=self.ALGORITHM)
+        return jwt.encode({"exp": datetime.utcnow() + expires_delta, **data}, self.secret)
 
     # api login endpoint
     async def login_for_access_token(self, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:

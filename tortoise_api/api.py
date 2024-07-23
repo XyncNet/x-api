@@ -10,7 +10,8 @@ from pydantic import BaseModel, ConfigDict
 from starlette import status
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from starlette.requests import Request
+from starlette.requests import Request, HTTPConnection
+from starlette.responses import Response
 from starlette.types import Lifespan
 from tortoise import Tortoise, ModelMeta
 from tortoise.contrib.pydantic import PydanticModel
@@ -76,16 +77,16 @@ class Api:
 
         # main app
         self.app = FastAPI(debug=debug, routes=auth_routes, title=title, separate_input_output_schemas=False, lifespan=lifespan)
+        # CORS # noinspection PyTypeChecker
+        self.app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+        def on_error(conn: HTTPConnection, exc: Exception) -> Response:
+            resp = Response(str(exc), status_code=status.HTTP_303_SEE_OTHER, headers={"Set-cookie": "access_token=", "Location": "t", })
+            resp.delete_cookie('access_token')
+            return resp
+
         # noinspection PyTypeChecker
-        self.app.add_middleware(
-            CORSMiddleware,
-            allow_origins=["*"],
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-        )
-        # noinspection PyTypeChecker
-        self.app.add_middleware(AuthenticationMiddleware, backend=self.oauth)
+        self.app.add_middleware(AuthenticationMiddleware, backend=self.oauth, on_error=on_error)
 
         # FastAPICache.init(InMemoryBackend(), expire=600)
         # db init
