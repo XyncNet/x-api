@@ -21,7 +21,7 @@ dependencies = [
     "python-multipart",
     "uvicorn",
 ]
-version = "0.9.8"
+version = "0.9.9"
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"

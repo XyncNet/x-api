@@ -21,7 +21,7 @@ from tortoise_api_model.enum import Scope
 from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import PydList
 
-from tortoise_api.loader import TOKEN, DB_URL
+from tortoise_api.loader import TOKEN, DB_URL, Names, Pagination, Name
 from tortoise_api.oauth import OAuth, Token
 
 
@@ -127,6 +127,13 @@ class Api:
                 data = await mod.pagePyd(sorts, params.limit, params.offset, params.q, owner, **params.model_extra)
                 return data
 
+            async def names(request: Request, search: str = None, page: int = 1) -> Names:
+                mod: Model.__class__ = _req2mod(request)
+                query = mod.pageQuery([], q=search)
+                filtered = await query.count()
+                data = await query.limit(50).offset(50*(page-1)).values('id', mod._name)
+                return Names(results=[Name(id=d['id'], text=d[mod._name]) for d in data], pagination=Pagination(more=filtered>50*page))
+
             async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod = _req2mod(request)
                 owner: int | None = Scope.All.name not in request.auth.scopes and request.user.id
@@ -162,6 +169,7 @@ class Api:
             upd_perm = tmp if (tmp := list({self.write if perms[1] else None, self.my if perms[2] else None}))[0] else None
             ar = APIRouter(routes=[
                 APIRoute('/'+name, index, methods=['POST'], name=name+' objects list', dependencies=[self.read] if perms[0] else None, response_model=schema[2], operation_id=f'get{name}List'),
+                APIRoute('/'+name, names, methods=['GET'], name=name+' names list', response_model=Names, operation_id=f'get{name}NamesList'),
                 APIRoute('/'+name, upsert, methods=['PUT'], name=name+' object create', dependencies=[self.write] if perms[1] else None, response_model=schema[0], operation_id=f'new{name}'),
                 APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', dependencies=[self.write] if perms[2] else None, response_model=schema[0], operation_id=f'get{name}'),
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['PATCH'], name=name+' object update', dependencies=upd_perm, response_model=schema[0], operation_id=f'upd{name}'),
