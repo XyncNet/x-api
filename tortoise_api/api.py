@@ -1,4 +1,5 @@
 import logging
+from enum import Enum
 from functools import reduce
 from types import ModuleType
 from typing import Annotated, Type
@@ -142,7 +143,7 @@ class Api:
                 query = query.prefetch_related(*rels)
                 filtered = await query.count()
                 data = await query.limit(50).offset(50*(page-1)).values(*keys)
-                data = [{'text': ' | '.join(d.pop(n) for n in mod._name), **d} for d in data]
+                data = [{'text': ' | '.join((item.name if isinstance(item := d.pop(n), Enum) else str(item)) for n in mod._name), **d} for d in data]
                 return Names(results=data, pagination=Pagination(more=filtered > 50*page))
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
