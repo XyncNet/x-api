@@ -2,7 +2,6 @@ from os import getenv as env
 from aiogram.types import User as TgUser
 from aiogram.utils.web_app import WebAppUser
 from dotenv import load_dotenv
-from pydantic import BaseModel
 from xync_schema.models import User, UserStatus, Lang
 
 load_dotenv()
@@ -17,17 +16,3 @@ async def user_upsert(u: TgUser | WebAppUser, status: UserStatus = None) -> (Use
     if status:
         udf.update({'status': status})
     return await User.update_or_create(udf, id=u.id)
-
-
-class Name(BaseModel):
-    id: int
-    text: str
-
-
-class Pagination(BaseModel):
-    more: bool
-
-
-class Names(BaseModel):
-    results: list[Name]
-    pagination: Pagination

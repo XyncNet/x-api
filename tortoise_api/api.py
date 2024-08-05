@@ -19,9 +19,9 @@ from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
 from tortoise_api_model.enum import Scope
 from tortoise_api_model.model import Model
-from tortoise_api_model.pydantic import PydList
+from tortoise_api_model.pydantic import PydList, Names, Pagination
 
-from tortoise_api.loader import TOKEN, DB_URL, Names, Pagination, Name
+from tortoise_api.loader import TOKEN, DB_URL
 from tortoise_api.oauth import OAuth, Token
 
 
@@ -80,7 +80,7 @@ class Api:
         # CORS # noinspection PyTypeChecker
         self.app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-        def on_error(conn: HTTPConnection, exc: Exception) -> Response:
+        def on_error(_: HTTPConnection, exc: Exception) -> Response:
             resp = Response(str(exc), status_code=status.HTTP_303_SEE_OTHER, headers={"Set-cookie": "access_token=", "Location": "t", })
             resp.delete_cookie('access_token')
             return resp
@@ -130,9 +130,20 @@ class Api:
             async def names(request: Request, search: str = None, page: int = 1) -> Names:
                 mod: Model.__class__ = _req2mod(request)
                 query = mod.pageQuery([], q=search)
+                rels: list[str] = []
+                keys: list[str] = ['id']
+                for nam in mod._name:
+                    parts = nam.split('__')
+                    if len(parts) > 1:
+                        rels.append('__'.join(parts[:-1]))
+                    keys.append(nam)
+                if 'logo' in mod._meta.fields:
+                    keys.append('logo')
+                query = query.prefetch_related(*rels)
                 filtered = await query.count()
-                data = await query.limit(50).offset(50*(page-1)).values('id', mod._name)
-                return Names(results=[Name(id=d['id'], text=d[mod._name]) for d in data], pagination=Pagination(more=filtered>50*page))
+                data = await query.limit(50).offset(50*(page-1)).values(*keys)
+                data = [{'text': ' | '.join(d.pop(n) for n in mod._name), **d} for d in data]
+                return Names(results=data, pagination=Pagination(more=filtered > 50*page))
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
                 mod = _req2mod(request)
