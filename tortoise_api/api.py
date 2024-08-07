@@ -1,5 +1,4 @@
 import logging
-from enum import Enum
 from functools import reduce
 from types import ModuleType
 from typing import Annotated, Type
@@ -22,7 +21,7 @@ from tortoise_api_model.enum import Scope
 from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import PydList, Names, Pagination
 
-from tortoise_api.loader import TOKEN, DB_URL
+from tortoise_api.loader import TOKEN, DB_URL, _repr
 from tortoise_api.oauth import OAuth, Token
 
 
@@ -138,12 +137,12 @@ class Api:
                     if len(parts) > 1:
                         rels.append('__'.join(parts[:-1]))
                     keys.append(nam)
-                if 'logo' in mod._meta.fields:
-                    keys.append('logo')
                 query = query.prefetch_related(*rels)
                 filtered = await query.count()
+                if 'logo' in mod._meta.fields:
+                    keys.append('logo')
                 data = await query.limit(50).offset(50*(page-1)).values(*keys)
-                data = [{'text': ' | '.join((item.name if isinstance(item := d.pop(n), Enum) else str(item)) for n in mod._name), **d} for d in data]
+                data = [{'text': _repr(d, mod._name), **d} for d in data]
                 return Names(results=data, pagination=Pagination(more=filtered > 50*page))
 
             async def one(request: Request, item_id: Annotated[int, Path()]):

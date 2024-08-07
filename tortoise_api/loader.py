@@ -1,3 +1,4 @@
+from enum import Enum
 from os import getenv as env
 from aiogram.types import User as TgUser
 from aiogram.utils.web_app import WebAppUser
@@ -16,3 +17,7 @@ async def user_upsert(u: TgUser | WebAppUser, status: UserStatus = None) -> (Use
     if status:
         udf.update({'status': status})
     return await User.update_or_create(udf, id=u.id)
+
+
+def _repr(dct: dict, _names):
+    return ' | '.join((item.name if isinstance(item := dct.pop(n), Enum) else str(item)) for n in _names)
