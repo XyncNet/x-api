@@ -20,4 +20,7 @@ async def user_upsert(u: TgUser | WebAppUser, status: UserStatus = None) -> (Use
 
 
 def _repr(dct: dict, _names):
-    return ' | '.join((item.name if isinstance(item := dct.pop(n), Enum) else str(item)) for n in _names)
+    try:
+        return ' | '.join((item.name if isinstance(item := dct.pop(n), Enum) else str(item)) for n in _names)
+    except KeyError:
+        return dct['id']
