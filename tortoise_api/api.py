@@ -127,9 +127,14 @@ class Api:
                 data = await mod.pagePyd(sorts, params.limit, params.offset, params.q, owner, **params.model_extra)
                 return data
 
-            async def names(request: Request, search: str = None, page: int = 1) -> Names:
+            async def names(request: Request, search: str = None, page: int = 1, fname: str = None, fid: int = None) -> Names:
                 mod: Model.__class__ = _req2mod(request)
+                fname, fid = request.headers['referer'].split('/')[-2:]
                 query = mod.pageQuery([], q=search)
+                selected = []
+                if fid.isnumeric():
+                    if (fname := fname.lower()) in mod._meta.fetch_fields or (fname := fname+'s') in mod._meta.fetch_fields:
+                        selected = await mod.filter(**{fname: fid}).values_list('id', flat=True)
                 rels: list[str] = []
                 keys: list[str] = ['id']
                 for nam in mod._name:
@@ -141,8 +146,10 @@ class Api:
                 filtered = await query.count()
                 if 'logo' in mod._meta.fields:
                     keys.append('logo')
-                data = await query.limit(50).offset(50*(page-1)).values(*keys)
-                data = [{'text': _repr(d, mod._name), **d} for d in data]
+                if page > 0:
+                    query = query.limit(50).offset(50*(page-1))
+                data = await query.values(*keys)
+                data = [{'text': _repr(d, mod._name), 'selected': d['id'] in selected, **d} for d in data]
                 return Names(results=data, pagination=Pagination(more=filtered > 50*page))
 
             async def one(request: Request, item_id: Annotated[int, Path()]):
