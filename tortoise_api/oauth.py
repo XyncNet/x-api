@@ -162,12 +162,10 @@ class OAuth(AuthenticationBackend):
         def __init__(
             self,
             detail: AuthFailReason,
-            clear_cookie: str | None
+            clear_cookie: str | None = 'access_token'
         ) -> None:
             hdrs = {'set-cookie': clear_cookie+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT'} if clear_cookie else None  # path=/;
             super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail.name, headers=hdrs)
-
-
 
     async def authenticate_user(self, username: str, password: str) -> tuple[TokenData, Model]:
         if user_db := await self.db_user_model.get_or_none(username=username):
