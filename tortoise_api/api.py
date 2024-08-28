@@ -127,12 +127,12 @@ class Api:
                 data = await mod.pagePyd(sorts, params.limit, params.offset, params.q, owner, **params.model_extra)
                 return data
 
-            async def names(request: Request, search: str = None, page: int = 1, fname: str = None, fid: int = None) -> Names:
+            async def names(request: Request, fname: str = None, fid: int = None, page: int = 1, search: str = None) -> Names:
                 mod: Model.__class__ = _req2mod(request)
-                fname, fid = request.headers['referer'].split('/')[-2:]
+                # fname, fid = request.headers.get('referer', '').split('/')[-2:]
                 query = mod.pageQuery([], q=search)
                 selected = []
-                if fid.isnumeric():
+                if fid and fid.isnumeric():
                     if (fname := fname.lower()) in mod._meta.fetch_fields or (fname := fname+'s') in mod._meta.fetch_fields:
                         selected = await mod.filter(**{fname: fid}).values_list('id', flat=True)
                 rels: list[str] = []

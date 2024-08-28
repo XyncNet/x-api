@@ -21,6 +21,7 @@ class AuthFailReason(IntEnum):
     username = 1
     password = 2
     signature = 3
+    expired = 4
 
 
 class AuthType(IntEnum):
@@ -79,7 +80,14 @@ class OAuth(AuthenticationBackend):
             from_attributes=True
         )
 
-    async def authenticate(self, conn: HTTPConnection) -> tuple[AuthCredentials, SimpleUser] | None:
+    def get_data_from_jwt(self, jwtoken: str) -> tuple[AuthCredentials, AuthUser]:
+        payload = jwt.decode(jwtoken, self.secret, algorithms=["HS256"])
+        uid: int = payload.get("id")
+        username: str = payload.get("sub")
+        scopes = payload.get("scopes", [])
+        return AuthCredentials(scopes), AuthUser(uid, username)
+
+    async def authenticate(self, conn: HTTPConnection) -> tuple[AuthCredentials, AuthUser] | None:
         if "Authorization" not in conn.headers or not (auth := conn.headers["Authorization"]):
             return
 
@@ -91,16 +99,15 @@ class OAuth(AuthenticationBackend):
             credentials = (await self.get_token_for_tg(tgData.user)).access_token
         if scheme.lower() == 'bearer':
             try:
-                payload = jwt.decode(credentials, self.secret, algorithms=["HS256"])
-            except (JWTError, ValidationError) as e:
-                raise AuthenticationError()
-            uid: int = payload.get("id")
-            username: str = payload.get("sub")
-            token_scopes = payload.get("scopes", [])
-            return AuthCredentials(token_scopes), AuthUser(uid, username)
-        # except Exception as exc:
-        #     print(exc)
-        #     raise AuthenticationError('Invalid auth credentials')
+                return self.get_data_from_jwt(credentials)
+            except JWTError as e:
+                print(e)
+                raise self.AuthException(AuthFailReason.expired, 'access_token')
+            except ValidationError as e:
+                print(e)
+                raise self.AuthException(AuthFailReason.signature, 'access_token')
+            except Exception as exc:
+                raise AuthenticationError(exc, 'Invalid auth credentials')
 
     # dependency
     async def check_token(self, security_scopes: SecurityScopes, token: Annotated[str | None, Depends(oauth2_scheme)]):  # , tg_data: [str, ]
@@ -113,26 +120,22 @@ class OAuth(AuthenticationBackend):
             headers={"WWW-Authenticate": auth_val},
         )
         try:
-            payload = jwt.decode(token, self.secret, algorithms=["HS256"])
+            creds, user = self.get_data_from_jwt(token)
         except (JWTError, ValidationError) as e:
             cred_exc.detail += f': {e}'
             raise cred_exc
-        username: str = payload.get("sub")
-        uid: int = payload.get("id")
-        if not username or not uid:
+        if not user.username or not user.id:
             cred_exc.detail += 'token'
             raise cred_exc
-        token_scopes = payload.get("scopes", [])
-        token_data = TokenData(id=uid, scopes=token_scopes, username=username)
         # noinspection PyTypeChecker
-        user_status: UserStatus | None = await self.db_user_model.get_or_none(username=token_data.username).values_list('status', flat=True)
+        user_status: UserStatus | None = await self.db_user_model.get_or_none(username=user.username).values_list('status', flat=True)
         if not user_status:
             cred_exc.detail = 'User not found'
             raise cred_exc
         elif user_status < UserStatus.test:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
         for scope in security_scopes.scopes:
-            if scope not in token_data.scopes:
+            if scope not in creds.scopes:
                 cred_exc.detail = f"Not enough permissions. Need `{scope}`"
                 raise cred_exc
 
@@ -159,8 +162,12 @@ class OAuth(AuthenticationBackend):
         def __init__(
             self,
             detail: AuthFailReason,
+            clear_cookie: str | None
         ) -> None:
-            super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail.name)
+            hdrs = {'set-cookie': clear_cookie+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT'} if clear_cookie else None  # path=/;
+            super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail.name, headers=hdrs)
+
+
 
     async def authenticate_user(self, username: str, password: str) -> tuple[TokenData, Model]:
         if user_db := await self.db_user_model.get_or_none(username=username):
