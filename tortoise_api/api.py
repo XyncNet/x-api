@@ -127,14 +127,14 @@ class Api:
                 data = await mod.pagePyd(sorts, params.limit, params.offset, params.q, owner, **params.model_extra)
                 return data
 
-            async def names(request: Request, fname: str = None, fid: int = None, page: int = 1, search: str = None) -> Names:
+            async def names(request: Request, fname: str = None, fid: int = None, sname: str = None, sid: int = None, page: int = 1, search: str = None) -> Names:
                 mod: Model.__class__ = _req2mod(request)
-                # fname, fid = request.headers.get('referer', '').split('/')[-2:]
-                query = mod.pageQuery([], q=search)
+                fltr = {fname: fid} if fname and fid else {}
+                query = mod.pageQuery([], q=search, **fltr)
                 selected = []
-                if fid and fid.isnumeric():
-                    if (fname := fname.lower()) in mod._meta.fetch_fields or (fname := fname+'s') in mod._meta.fetch_fields:
-                        selected = await mod.filter(**{fname: fid}).values_list('id', flat=True)
+                if sid and sname:
+                    if (sname := sname.lower()) in mod._meta.fetch_fields or (sname := sname+'s') in mod._meta.fetch_fields:
+                        selected = await mod.filter(**{sname: sid}).values_list('id', flat=True)
                 rels: list[str] = []
                 keys: list[str] = ['id']
                 for nam in mod._name:
@@ -152,7 +152,7 @@ class Api:
                 data = [{'text': _repr(d, mod._name), 'selected': d['id'] in selected, **d} for d in data]
                 return Names(results=data, pagination=Pagination(more=filtered > 50*page))
 
-            async def one(request: Request, item_id: Annotated[int, Path()]):
+            async def one(request: Request, item_id: Annotated[int, Path()]) -> schema[0]:
                 mod = _req2mod(request)
                 owner: int | None = Scope.All.name not in request.auth.scopes and request.user.id
                 try:
@@ -160,7 +160,7 @@ class Api:
                 except DoesNotExist:
                     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
-            async def upsert(obj: schema[1], item_id: int | None = None):
+            async def upsert(obj: schema[1], item_id: int | None = None) -> schema[0]:
                 mod: Type[Model] = obj.model_config['orig_model']
                 obj_dict = obj.model_dump()
                 args = [obj_dict]
