@@ -47,7 +47,8 @@ class Api:
             debug: bool = False,
             title: str = 'FemtoAPI',
             exc_models: set[str] = None,
-            lifespan: Lifespan = None
+            lifespan: Lifespan = None,
+            oauth: OAuth = None
     ):
         """
         Parameters:
@@ -62,7 +63,7 @@ class Api:
         # self.module =
         self.set_models(module, exc_models)
 
-        self.oauth = OAuth(TOKEN, self.models['User'])
+        self.oauth = oauth or OAuth(TOKEN, self.models['User'])
         # todo: move it to oauth.py
         self.read = Security(self.oauth.check_token, scopes=[Scope.Read.name])
         self.write = Security(self.oauth.check_token, scopes=[Scope.Write.name])
