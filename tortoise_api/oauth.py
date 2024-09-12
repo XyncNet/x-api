@@ -9,6 +9,7 @@ from pydantic import BaseModel, ValidationError
 from starlette import status
 from starlette.authentication import AuthCredentials, SimpleUser, AuthenticationError, AuthenticationBackend
 from starlette.requests import HTTPConnection
+from starlette.responses import Response
 from tortoise_api_model.enum import Scope, UserRole, UserStatus
 from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import UserReg, UserSchema
@@ -22,6 +23,25 @@ class AuthFailReason(IntEnum):
     password = 2
     signature = 3
     expired = 4
+
+
+class AuthException(AuthenticationError, HTTPException):
+    detail: AuthFailReason
+
+    def __init__(
+        self,
+        detail: AuthFailReason,
+        clear_cookie: str | None = 'access_token'
+    ) -> None:
+        hdrs = {'set-cookie': clear_cookie+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT'} if clear_cookie else None  # path=/;
+        super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail.name, headers=hdrs)
+
+
+def on_error(_: HTTPConnection, exc: AuthException) -> Response:
+    hdr = {"Location": "/login", } if exc.status_code == 303 and '/login' in (r.path for r in _.app.routes) else {}
+    resp = Response(str(exc), status_code=exc.status_code, headers=hdr)
+    resp.delete_cookie('access_token')
+    return resp
 
 
 class AuthType(IntEnum):
@@ -88,9 +108,8 @@ class OAuth(AuthenticationBackend):
         return AuthCredentials(scopes), AuthUser(uid, username)
 
     async def authenticate(self, conn: HTTPConnection) -> tuple[AuthCredentials, AuthUser] | None:
-        if "Authorization" not in conn.headers or not (auth := conn.headers["Authorization"]):
+        if not (auth := conn.headers.get("Authorization")):
             return
-
         # try:
         scheme, credentials = auth.split()
         if scheme.lower() == 'tgdata':
@@ -102,12 +121,12 @@ class OAuth(AuthenticationBackend):
                 return self.get_data_from_jwt(credentials)
             except JWTError as e:
                 print(e)
-                raise self.AuthException(AuthFailReason.expired, 'access_token')
+                raise AuthException(AuthFailReason.expired, 'access_token')
             except ValidationError as e:
                 print(e)
-                raise self.AuthException(AuthFailReason.signature, 'access_token')
-            except Exception as exc:
-                raise AuthenticationError(exc, 'Invalid auth credentials')
+                raise AuthException(AuthFailReason.signature, 'access_token')
+            # except Exception as exc:
+            #     raise AuthenticationError(exc, 'Invalid auth credentials')
 
     # dependency
     async def check_token(self, security_scopes: SecurityScopes, token: Annotated[str | None, Depends(oauth2_scheme)]):  # , tg_data: [str, ]
@@ -156,17 +175,6 @@ class OAuth(AuthenticationBackend):
         tok = await self.login_for_access_token(OAuth2PasswordRequestForm(username=user_reg_input.username, password=user_reg_input.password))
         return tok
 
-    class AuthException(HTTPException):
-        detail: AuthFailReason
-
-        def __init__(
-            self,
-            detail: AuthFailReason,
-            clear_cookie: str | None = 'access_token'
-        ) -> None:
-            hdrs = {'set-cookie': clear_cookie+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT'} if clear_cookie else None  # path=/;
-            super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail.name, headers=hdrs)
-
     async def authenticate_user(self, username: str, password: str) -> tuple[TokenData, Model]:
         if user_db := await self.db_user_model.get_or_none(username=username):
             td = TokenData.model_validate(user_db, from_attributes=True)
@@ -176,7 +184,7 @@ class OAuth(AuthenticationBackend):
             reason = AuthFailReason.password
         else:
             reason = AuthFailReason.username
-        raise self.AuthException(detail=reason)
+        raise AuthException(detail=reason)
 
     def gen_access_token(self, data: dict, expires_delta: timedelta = EXPIRES) -> str:
         return jwt.encode({"exp": datetime.utcnow() + expires_delta, **data}, self.secret)

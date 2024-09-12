@@ -10,8 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from starlette import status
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.cors import CORSMiddleware
-from starlette.requests import Request, HTTPConnection
-from starlette.responses import Response
+from starlette.requests import Request
 from starlette.types import Lifespan
 from tortoise import Tortoise, ModelMeta
 from tortoise.contrib.pydantic import PydanticModel
@@ -22,7 +21,7 @@ from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import PydList, Names, Pagination
 
 from tortoise_api.loader import TOKEN, DB_URL, _repr
-from tortoise_api.oauth import OAuth, Token
+from tortoise_api.oauth import OAuth, Token, on_error
 
 
 class ListArgs(BaseModel):
@@ -80,11 +79,6 @@ class Api:
         self.app = FastAPI(debug=debug, routes=auth_routes, title=title, separate_input_output_schemas=False, lifespan=lifespan)
         # CORS # noinspection PyTypeChecker
         self.app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
-        def on_error(_: HTTPConnection, exc: Exception) -> Response:
-            resp = Response(str(exc), status_code=status.HTTP_303_SEE_OTHER, headers={"Set-cookie": "access_token=", "Location": "t", })
-            resp.delete_cookie('access_token')
-            return resp
 
         # noinspection PyTypeChecker
         self.app.add_middleware(AuthenticationMiddleware, backend=self.oauth, on_error=on_error)
