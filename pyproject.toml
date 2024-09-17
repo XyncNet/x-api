@@ -8,7 +8,10 @@ keywords = ["starlette", "fastapi", "admin", "generator", "db-model", "crud", "t
 description = "Simplest fastest minimal REST API CRUD generator for Tortoise ORM models"
 readme = "README.md"
 license = {text = "MIT"}
+
+version = "0.10.7"
 dependencies = [
+    "aiogram",
     "asyncpg",
     "python-dotenv",
     "fastapi",
@@ -20,8 +23,13 @@ dependencies = [
     "passlib[bcrypt]",
     "python-multipart",
     "uvicorn",
+    "tortoise-api-model",
 ]
-version = "0.10.6"
+
+[project.optional-dependencies]
+dev = [
+    "pytest"
+]
 
 [project.urls]
 Homepage = "https://github.com/mixartemev/tortoise-api"

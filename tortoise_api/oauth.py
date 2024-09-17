@@ -2,7 +2,7 @@ from datetime import timedelta, datetime
 from enum import IntEnum
 from typing import Annotated
 from aiogram.utils.web_app import WebAppUser, safe_parse_webapp_init_data
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Security
 from fastapi.security import OAuth2PasswordBearer, SecurityScopes, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
 from pydantic import BaseModel, ValidationError
@@ -76,6 +76,11 @@ class OAuth(AuthenticationBackend):
         self.secret: str = secret
         self.db_user_model: type[User] = db_user_model
         self.auth_type: AuthType = auth_type
+
+        self.read = Security(self.check_token, scopes=[Scope.Read.name])
+        self.write = Security(self.check_token, scopes=[Scope.Write.name])
+        self.my = Security(self.check_token, scopes=[Scope.All.name])
+        self.active = Depends(self.check_token)
 
     oauth2_scheme = OAuth2PasswordBearer(
         tokenUrl="token",

@@ -2,7 +2,7 @@ import logging
 from functools import reduce
 from types import ModuleType
 from typing import Annotated, Type
-from fastapi import FastAPI, Depends, Path, HTTPException, Security
+from fastapi import FastAPI, Path, HTTPException
 from fastapi.routing import APIRoute, APIRouter
 from pydantic import BaseModel, ConfigDict
 # from fastapi_cache import FastAPICache
@@ -63,11 +63,6 @@ class Api:
         self.set_models(module, exc_models)
 
         self.oauth = oauth or OAuth(TOKEN, self.models['User'])
-        # todo: move it to oauth.py
-        self.read = Security(self.oauth.check_token, scopes=[Scope.Read.name])
-        self.write = Security(self.oauth.check_token, scopes=[Scope.Write.name])
-        self.my = Security(self.oauth.check_token, scopes=[Scope.All.name])
-        self.active = Depends(self.oauth.check_token)
 
         # get auth token route
         auth_routes = [
@@ -179,13 +174,13 @@ class Api:
                     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=e.__repr__())
 
             perms: tuple[bool,bool,bool] = schema[0].model_config['orig_model']._permissions
-            upd_perm = tmp if (tmp := list({self.write if perms[1] else None, self.my if perms[2] else None}))[0] else None
+            upd_perm = tmp if (tmp := list({self.oauth.write if perms[1] else None, self.oauth.my if perms[2] else None}))[0] else None
             ar = APIRouter(routes=[
-                APIRoute('/'+name, index, methods=['POST'], name=name+' objects list', dependencies=[self.read] if perms[0] else None, response_model=schema[2], operation_id=f'get{name}List'),
+                APIRoute('/'+name, index, methods=['POST'], name=name+' objects list', dependencies=[self.oauth.read] if perms[0] else None, response_model=schema[2], operation_id=f'get{name}List'),
                 APIRoute('/'+name, names, methods=['GET'], name=name+' names list', response_model=Names, operation_id=f'get{name}NamesList'),
-                APIRoute('/'+name, upsert, methods=['PUT'], name=name+' object create', dependencies=[self.write] if perms[1] else None, response_model=schema[0], operation_id=f'new{name}'),
-                APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', dependencies=[self.write] if perms[2] else None, response_model=schema[0], operation_id=f'get{name}'),
+                APIRoute('/'+name, upsert, methods=['PUT'], name=name+' object create', dependencies=[self.oauth.write] if perms[1] else None, response_model=schema[0], operation_id=f'new{name}'),
+                APIRoute('/'+name+'/{item_id}', one, methods=['GET'], name=name+' object get', dependencies=[self.oauth.write] if perms[2] else None, response_model=schema[0], operation_id=f'get{name}'),
                 APIRoute('/'+name+'/{item_id}', upsert, methods=['PATCH'], name=name+' object update', dependencies=upd_perm, response_model=schema[0], operation_id=f'upd{name}'),
                 APIRoute('/'+name+'/{item_id}', delete, methods=['DELETE'], name=name+' object delete', dependencies=upd_perm, response_model=dict, operation_id=f'del{name}'),
             ])
-            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[self.active] if perms[0] and perms[1] and perms[2] else None)
+            self.app.include_router(ar, prefix=self.prefix, tags=[name], dependencies=[self.oauth.active] if perms[0] and perms[1] and perms[2] else None)
