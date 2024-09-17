@@ -21,7 +21,7 @@ from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import PydList, Names, Pagination
 
 from tortoise_api.loader import TOKEN, DB_URL, _repr
-from tortoise_api.oauth import OAuth, Token, on_error
+from tortoise_api.oauth import OAuth, on_error
 
 
 class ListArgs(BaseModel):
@@ -66,8 +66,8 @@ class Api:
 
         # get auth token route
         auth_routes = [
-            APIRoute('/register', self.oauth.reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=Token, operation_id='register'),
-            APIRoute('/token', self.oauth.login_for_access_token, methods=['POST'], response_model=Token, tags=['auth'], operation_id='token'),
+            APIRoute('/register', self.oauth.reg_user, methods=['POST'], tags=['auth'], name='SignUp', response_model=self.oauth.Token, operation_id='register'),
+            APIRoute('/token', self.oauth.login_for_access_token, methods=['POST'], response_model=self.oauth.Token, tags=['auth'], operation_id='token'),
         ]
 
         # main app

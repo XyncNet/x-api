@@ -55,12 +55,6 @@ class TokenData(BaseModel):
     scopes: list[str] = []
 
 
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    user: UserSchema
-
-
 class AuthUser(SimpleUser):
     id: int
 
@@ -71,6 +65,11 @@ class AuthUser(SimpleUser):
 
 class OAuth(AuthenticationBackend):
     EXPIRES = timedelta(days=7)
+
+    class Token(BaseModel):
+        access_token: str
+        token_type: str
+        user: UserSchema
 
     def __init__(self, secret: str, db_user_model: type[User] = User, auth_type: AuthType = AuthType.pwd):
         self.secret: str = secret
@@ -100,7 +99,7 @@ class OAuth(AuthenticationBackend):
             expires_delta=self.EXPIRES,
         )
         auth_user: UserSchema = UserSchema.model_validate(user, from_attributes=True)
-        return Token.model_validate(
+        return self.Token.model_validate(
             {"access_token": access_token, "token_type": "bearer", "user": auth_user},
             from_attributes=True
         )
@@ -202,5 +201,5 @@ class OAuth(AuthenticationBackend):
                 data={"id": token.id, "sub": token.username, "scopes": token.scopes},
                 expires_delta=self.EXPIRES,
             )
-            r = Token.model_validate({"access_token": access_token, "token_type": "bearer", "user": user_db}, from_attributes=True)
+            r = self.Token.model_validate({"access_token": access_token, "token_type": "bearer", "user": user_db}, from_attributes=True)
             return r
