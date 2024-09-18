@@ -1,6 +1,6 @@
 [project]
 name = "tortoise-api"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
     {name = "Artemiev", email = "mixartemev@gmail.com"},
 ]
@@ -8,8 +8,8 @@ keywords = ["starlette", "fastapi", "admin", "generator", "db-model", "crud", "t
 description = "Simplest fastest minimal REST API CRUD generator for Tortoise ORM models"
 readme = "README.md"
 license = {text = "MIT"}
+dynamic = ["version"]
 
-version = "0.10.8"
 dependencies = [
     "aiogram",
     "asyncpg",
@@ -28,12 +28,25 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest"
+    "build",
+    "twine",
+    "setuptools_scm",
 ]
 
 [project.urls]
-Homepage = "https://github.com/mixartemev/tortoise-api"
-Repository = "https://github.com/mixartemev/tortoise-api"
+Homepage = "https://github.com/mixartemev/x-api"
+Repository = "https://github.com/mixartemev/x-api"
+
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm[toml]>=8"]
+build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["tortoise_api"]
+
+[tool.setuptools_scm]
+version_scheme = "python-simplified-semver" # if "feature" in `branch_name` SEMVER_MINOR++ else SEMVER_PATCH++
+local_scheme = "no-local-version"
+
+[tool.ruff]
+line-length = 120
