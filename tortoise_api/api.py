@@ -158,7 +158,7 @@ class Api:
                     if (sname := sname.lower()) in mod._meta.fetch_fields or (
                         sname := sname + "s"
                     ) in mod._meta.fetch_fields:
-                        selected = await mod.filter(**{sname: sid}).values_list("id", flat=True)
+                        selected = await mod.filter(**{sname: sid}).order_by(*mod._name).values_list("id", flat=True)
                 rels: list[str] = []
                 keys: list[str] = ["id"]
                 for nam in mod._name:
