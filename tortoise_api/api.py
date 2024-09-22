@@ -152,13 +152,13 @@ class Api:
             ) -> Names:
                 mod: Model.__class__ = _req2mod(request)
                 fltr = {fname: fval} if fname else {}
-                query = mod.pageQuery([], q=search, **fltr)
+                query = mod.pageQuery(list(mod._name), q=search, **fltr)
                 selected = []
                 if sid and sname:
                     if (sname := sname.lower()) in mod._meta.fetch_fields or (
                         sname := sname + "s"
                     ) in mod._meta.fetch_fields:
-                        selected = await mod.filter(**{sname: sid}).order_by(*mod._name).values_list("id", flat=True)
+                        selected = await mod.filter(**{sname: sid}).values_list("id", flat=True)
                 rels: list[str] = []
                 keys: list[str] = ["id"]
                 for nam in mod._name:
