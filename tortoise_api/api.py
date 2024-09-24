@@ -19,7 +19,7 @@ from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
 from tortoise_api_model.enum import Scope
 from tortoise_api_model.model import Model
-from tortoise_api_model.pydantic import PydList, Names, Pagination
+from tortoise_api_model.pydantic import PydList, Names
 
 from tortoise_api.loader import TOKEN, DB_URL, _repr
 from tortoise_api.oauth import OAuth, on_error
@@ -174,7 +174,7 @@ class Api:
                     query = query.limit(limit).offset(limit * (page - 1))
                 data = await query.values(*keys)
                 data = [{"text": _repr(d, mod._name), "selected": d["id"] in selected, **d} for d in data]
-                return Names(results=data, pagination=Pagination(more=filtered > limit * page))
+                return Names(results=data, pagination=Names.Pagination(more=filtered > limit * page))
 
             async def one(request: Request, item_id: Annotated[int, Path()]) -> schema[0]:
                 mod = _req2mod(request)
