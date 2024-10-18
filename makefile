@@ -1,6 +1,6 @@
+include .env
 PACKAGE := x_api
-VENV := venv
-VPYTHON := . $(VENV)/bin/activate && python
+VPYTHON := $(VENV)/bin/python
 
 .PHONY: all install pre-commit clean build twine patch
 
