@@ -23,8 +23,8 @@ dev = [
     "twine",
 ]
 auth = ["xn-auth"]
-tg = ["xtg-auth"]
-pwd = ["pwd-auth"]
+auth-pswd = ["pswd-auth"]
+auth-tg = ["xtg-auth"]
 
 [project.urls]
 Homepage = "https://github.com/XyncNet/x-api"

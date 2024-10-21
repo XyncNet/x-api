@@ -9,7 +9,6 @@ from pydantic import BaseModel, ConfigDict
 # from fastapi_cache import FastAPICache
 # from fastapi_cache.backends.inmemory import InMemoryBackend
 from starlette import status
-from starlette.authentication import AuthenticationBackend
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -19,10 +18,9 @@ from tortoise.contrib.pydantic import PydanticModel
 from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
 from x_auth import on_error
-from x_auth.backend import AuthBackend
-from x_auth.depend import Req
 from x_auth.enums import Scope
-from x_auth.models import Model
+from x_auth.model import Model
+from x_auth.router import AuthRouter
 from x_model.pydantic import PydList, Names
 
 from x_api import _repr
@@ -37,38 +35,31 @@ class ListArgs(BaseModel):
 
 
 class Api:
-    app: FastAPI
-    module: ModuleType
-    models: dict[str, type(Model)]
-    oauth: AuthBackend
-    redis = None
     prefix = "/v2"
+    module = ModuleType
+    models: dict[str, type(Model)]
 
     def __init__(
         self,
         module: ModuleType,
         dsn: str,
         token: str,
+        auth: type(AuthRouter) = None,
         debug: bool = False,
         title: str = "FemtoAPI",
         exc_models: set[str] = None,
         lifespan: Lifespan = None,
-        oauth: AuthenticationBackend = None,
     ):
         """
         Parameters:
             debug: Debug SQL queries, api requests
-            # auth_provider: Authentication Provider
+            auth: Authentication Provider
         """
+        logging.basicConfig(level=logging.DEBUG if debug else logging.INFO)
+
         self.title = title
-        if debug:
-            self.debug = True
-            logging.basicConfig(level=logging.DEBUG)
-
-        # self.module =
         self.set_models(module, exc_models)
-
-        self.oauth = oauth or AuthBackend(token)
+        self.auth: AuthRouter = (auth or AuthRouter)(token, self.models["User"])
 
         # get auth token route
         auth_routes = [
@@ -80,15 +71,7 @@ class Api:
                 name=path.title(),
                 operation_id=path,
             )
-            for path, (func, method) in self.oauth.routes.items()
-            # APIRoute(
-            #     "/token",
-            #     self.oauth.login_for_access_token,
-            #     methods=["POST"],
-            #     response_model=self.oauth.Token,
-            #     tags=["auth"],
-            #     operation_id="token",
-            # ),
+            for path, (func, method) in self.auth.routes.items()
         ]
 
         # main app
@@ -101,7 +84,7 @@ class Api:
         )
 
         # noinspection PyTypeChecker
-        self.app.add_middleware(AuthenticationMiddleware, backend=self.oauth, on_error=on_error)
+        self.app.add_middleware(AuthenticationMiddleware, backend=self.auth.backend, on_error=on_error)
 
         # FastAPICache.init(InMemoryBackend(), expire=600)
         # db init
@@ -122,7 +105,7 @@ class Api:
         self.module = modul
         top_models: set[type(Model)] = set(models_trees.keys()) - bottom_models
         # set global models list
-        self.models: dict[str, type(Model)] = {m.__name__: m for m in top_models if not excm or m.__name__ not in excm}
+        self.models = {m.__name__: m for m in top_models if not excm or m.__name__ not in excm}
 
     def gen_routes(self):
         Tortoise.init_models([self.module], "models")  # for relations
@@ -224,7 +207,7 @@ class Api:
 
             def deps(*scopes: Scope):
                 _reqs = mdl._req_intersects(*scopes)
-                return [getattr(Req, scope.name) for scope in _reqs]
+                return [getattr(self.auth.depend, scope.name) for scope in _reqs]
 
             routes = [
                 APIRoute(
@@ -290,7 +273,7 @@ class Api:
                         my,
                         methods=["POST"],
                         name="My " + name + " objects list",
-                        dependencies=[Req.AUTHENTICATED],
+                        dependencies=[self.auth.depend.AUTHENTICATED],
                         response_model=schema[2],
                         operation_id=f"getMy{name}List",
                     )
@@ -299,5 +282,5 @@ class Api:
                 APIRouter(routes=routes),
                 prefix=self.prefix,
                 tags=[name],
-                dependencies=[Req.ACTIVE] if deps(Scope.ALL) else None,
+                dependencies=[self.auth.depend.ACTIVE] if deps(Scope.ALL) else None,
             )
