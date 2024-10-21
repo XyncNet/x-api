@@ -1,6 +1,7 @@
+from tg_auth import User
 from tortoise import fields
 from x_auth.enums import Scope
-from x_auth.models import Model, User
+from x_auth.model import Model
 
 
 class Story(Model):
