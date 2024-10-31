@@ -91,7 +91,7 @@ class Api:
         # db init
         register_tortoise(self.app, db_url=dsn, modules={"models": [self.module]}, generate_schemas=debug)
 
-    def set_models(self, modul, excm: set[str]) -> FastAPI:
+    def set_models(self, modul, excm: set[str]):
         # extract models from module
         models_trees: dict[type(Model), [type(Model)]] = {
             mdl: mdl.mro() for key in dir(modul) if isinstance(mdl := getattr(modul, key), Model.__class__)
@@ -108,7 +108,7 @@ class Api:
         # set global models list
         self.models = {m.__name__: m for m in top_models if not excm or m.__name__ not in excm}
 
-    def gen_routes(self):
+    def gen_routes(self) -> FastAPI:
         Tortoise.init_models([self.module], "models")  # for relations
 
         schemas: {str: (Type[PydanticModel], Type[PydanticModel], Type[PydList])} = {
