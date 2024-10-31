@@ -1,9 +1,14 @@
+from dotenv import load_dotenv
+from os import getenv as env
+
 from tg_auth.router import TgRouter
 
-import models
 from x_api.api import Api
 
-dsn = "postgres://artemiev:@/test"
-token = "6806432376:AAFdzMhrF0jpO88eWgH4J856lMfhYZT77zg"
-api = Api(models, dsn, token, TgRouter, True)
+import model
+
+load_dotenv()
+
+api = Api(model, env("DB_URL"), env("SECRET"), TgRouter, True)
+
 api.gen_routes()

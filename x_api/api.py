@@ -12,14 +12,13 @@ from starlette import status
 from starlette.middleware.authentication import AuthenticationMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.types import Lifespan
 from tortoise import Tortoise, ModelMeta
 from tortoise.contrib.pydantic import PydanticModel
 from tortoise.contrib.starlette import register_tortoise
 from tortoise.exceptions import IntegrityError, DoesNotExist
 from x_auth import on_error
 from x_auth.enums import Scope
-from x_auth.model import Model
+from x_auth.models import Model
 from x_auth.router import AuthRouter
 from x_model.pydantic import PydList, Names
 
@@ -48,7 +47,7 @@ class Api:
         debug: bool = False,
         title: str = "FemtoAPI",
         exc_models: set[str] = None,
-        lifespan: Lifespan = None,
+        origins: list[str] = None,
     ):
         """
         Parameters:
@@ -75,12 +74,14 @@ class Api:
         ]
 
         # main app
-        self.app = FastAPI(
-            debug=debug, routes=auth_routes, title=title, separate_input_output_schemas=False, lifespan=lifespan
-        )
+        self.app = FastAPI(debug=debug, routes=auth_routes, title=title)
         # noinspection PyTypeChecker
         self.app.add_middleware(
-            CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"]
+            CORSMiddleware,
+            allow_origins=origins or ["*"],
+            allow_credentials=True,
+            allow_methods=["*"],
+            allow_headers=["*"],
         )
 
         # noinspection PyTypeChecker
@@ -90,7 +91,7 @@ class Api:
         # db init
         register_tortoise(self.app, db_url=dsn, modules={"models": [self.module]}, generate_schemas=debug)
 
-    def set_models(self, modul, excm: set[str]):
+    def set_models(self, modul, excm: set[str]) -> FastAPI:
         # extract models from module
         models_trees: dict[type(Model), [type(Model)]] = {
             mdl: mdl.mro() for key in dir(modul) if isinstance(mdl := getattr(modul, key), Model.__class__)
@@ -284,3 +285,5 @@ class Api:
                 tags=[name],
                 dependencies=[self.auth.depend.ACTIVE] if deps(Scope.ALL) else None,
             )
+
+        return self.app

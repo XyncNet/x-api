@@ -1,7 +1,12 @@
-import model
+from dotenv import load_dotenv
+from os import getenv as env
+
 from x_api.api import Api
 
-dsn = "postgres://artemiev:@/test"
-token = "6806432376:AAFdzMhrF0jpO88eWgH4J856lMfhYZT77zg"
-api = Api(model, dsn, token)
+import model
+
+load_dotenv()
+
+
+api = Api(model, env("DB_URL"), env("SECRET"))
 api.gen_routes()
