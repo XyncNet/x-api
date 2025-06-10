@@ -10,10 +10,10 @@ from starlette import status
 from starlette.authentication import AuthCredentials, SimpleUser, AuthenticationError, AuthenticationBackend
 from starlette.requests import HTTPConnection
 from starlette.responses import Response
+from tg_auth import User
 from tortoise_api_model.enum import Scope, UserRole, UserStatus
 from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import UserReg, UserSchema
-from xync_schema.models import User
 
 from tortoise_api.loader import TOKEN, user_upsert
 
@@ -28,19 +28,23 @@ class AuthFailReason(IntEnum):
 class AuthException(AuthenticationError, HTTPException):
     detail: AuthFailReason
 
-    def __init__(
-        self,
-        detail: AuthFailReason,
-        clear_cookie: str | None = 'access_token'
-    ) -> None:
-        hdrs = {'set-cookie': clear_cookie+'=; expires=Thu, 01 Jan 1970 00:00:00 GMT'} if clear_cookie else None  # path=/;
+    def __init__(self, detail: AuthFailReason, clear_cookie: str | None = "access_token") -> None:
+        hdrs = (
+            {"set-cookie": clear_cookie + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT"} if clear_cookie else None
+        )  # path=/;
         super().__init__(status_code=status.HTTP_401_UNAUTHORIZED, detail=detail.name, headers=hdrs)
 
 
 def on_error(_: HTTPConnection, exc: AuthException) -> Response:
-    hdr = {"Location": "/login", } if exc.status_code == 303 and '/login' in (r.path for r in _.app.routes) else {}
+    hdr = (
+        {
+            "Location": "/login",
+        }
+        if exc.status_code == 303 and "/login" in (r.path for r in _.app.routes)
+        else {}
+    )
     resp = Response(str(exc), status_code=exc.status_code, headers=hdr)
-    resp.delete_cookie('access_token')
+    resp.delete_cookie("access_token")
     return resp
 
 
@@ -86,22 +90,24 @@ class OAuth(AuthenticationBackend):
         scopes={
             Scope.Read.name: "Read own items",
             Scope.Write.name: "Write own items",
-            Scope.All.name: "Access for not only own items"
-        }
+            Scope.All.name: "Access for not only own items",
+        },
     )
 
     async def get_token_for_tg(self, tg_user: WebAppUser) -> Token:
         user: User
         user, cr = await user_upsert(tg_user)
         access_token = self.gen_access_token(
-            data={"sub": tg_user.username or str(tg_user.id), "id": tg_user.id,
-                  "scopes": self.role_scopes_map[user.role]},
+            data={
+                "sub": tg_user.username or str(tg_user.id),
+                "id": tg_user.id,
+                "scopes": self.role_scopes_map[user.role],
+            },
             expires_delta=self.EXPIRES,
         )
         auth_user: UserSchema = UserSchema.model_validate(user, from_attributes=True)
         return self.Token.model_validate(
-            {"access_token": access_token, "token_type": "bearer", "user": auth_user},
-            from_attributes=True
+            {"access_token": access_token, "token_type": "bearer", "user": auth_user}, from_attributes=True
         )
 
     def get_data_from_jwt(self, jwtoken: str) -> tuple[AuthCredentials, AuthUser]:
@@ -116,24 +122,26 @@ class OAuth(AuthenticationBackend):
             return
         # try:
         scheme, credentials = auth.split()
-        if scheme.lower() == 'tgdata':
+        if scheme.lower() == "tgdata":
             tgData = safe_parse_webapp_init_data(TOKEN, credentials)
-            scheme = 'bearer'
+            scheme = "bearer"
             credentials = (await self.get_token_for_tg(tgData.user)).access_token
-        if scheme.lower() == 'bearer':
+        if scheme.lower() == "bearer":
             try:
                 return self.get_data_from_jwt(credentials)
             except JWTError as e:
                 print(e)
-                raise AuthException(AuthFailReason.expired, 'access_token')
+                raise AuthException(AuthFailReason.expired, "access_token")
             except ValidationError as e:
                 print(e)
-                raise AuthException(AuthFailReason.signature, 'access_token')
+                raise AuthException(AuthFailReason.signature, "access_token")
             # except Exception as exc:
             #     raise AuthenticationError(exc, 'Invalid auth credentials')
 
     # dependency
-    async def check_token(self, security_scopes: SecurityScopes, token: Annotated[str | None, Depends(oauth2_scheme)]):  # , tg_data: [str, ]
+    async def check_token(
+        self, security_scopes: SecurityScopes, token: Annotated[str | None, Depends(oauth2_scheme)]
+    ):  # , tg_data: [str, ]
         auth_val = "Bearer"
         if security_scopes.scopes:
             auth_val += f' scope="{security_scopes.scope_str}"'
@@ -145,15 +153,17 @@ class OAuth(AuthenticationBackend):
         try:
             creds, user = self.get_data_from_jwt(token)
         except (JWTError, ValidationError) as e:
-            cred_exc.detail += f': {e}'
+            cred_exc.detail += f": {e}"
             raise cred_exc
         if not user.username or not user.id:
-            cred_exc.detail += 'token'
+            cred_exc.detail += "token"
             raise cred_exc
         # noinspection PyTypeChecker
-        user_status: UserStatus | None = await self.db_user_model.get_or_none(username=user.username).values_list('status', flat=True)
+        user_status: UserStatus | None = await self.db_user_model.get_or_none(username=user.username).values_list(
+            "status", flat=True
+        )
         if not user_status:
-            cred_exc.detail = 'User not found'
+            cred_exc.detail = "User not found"
             raise cred_exc
         elif user_status < UserStatus.test:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
@@ -176,7 +186,9 @@ class OAuth(AuthenticationBackend):
             await self.db_user_model.create(**data)
         except Exception as e:
             raise HTTPException(status.HTTP_406_NOT_ACCEPTABLE, detail=e.__repr__())
-        tok = await self.login_for_access_token(OAuth2PasswordRequestForm(username=user_reg_input.username, password=user_reg_input.password))
+        tok = await self.login_for_access_token(
+            OAuth2PasswordRequestForm(username=user_reg_input.username, password=user_reg_input.password)
+        )
         return tok
 
     async def authenticate_user(self, username: str, password: str) -> tuple[TokenData, Model]:
@@ -201,5 +213,7 @@ class OAuth(AuthenticationBackend):
                 data={"id": token.id, "sub": token.username, "scopes": token.scopes},
                 expires_delta=self.EXPIRES,
             )
-            r = self.Token.model_validate({"access_token": access_token, "token_type": "bearer", "user": user_db}, from_attributes=True)
+            r = self.Token.model_validate(
+                {"access_token": access_token, "token_type": "bearer", "user": user_db}, from_attributes=True
+            )
             return r

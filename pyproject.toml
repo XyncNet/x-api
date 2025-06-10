@@ -16,14 +16,14 @@ dependencies = [
     "python-dotenv",
     "fastapi",
 #    "fastapi-cache2",
-    "tortoise-api-model",
     "orjson",
     "uvicorn",
     "python-jose[cryptography]",
     "passlib[bcrypt]",
     "python-multipart",
     "uvicorn",
-    "tortoise-api-model",
+    "tortoise-api-model=0.9.8",
+    "xtg-auth==0.0.2",
 ]
 
 [project.optional-dependencies]
