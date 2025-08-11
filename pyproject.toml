@@ -22,7 +22,7 @@ dependencies = [
     "passlib[bcrypt]",
     "python-multipart",
     "uvicorn",
-    "tortoise-api-model==0.9.8",
+    "tortoise-api-model==0.9.5",
     "xtg-auth==0.0.2",
 ]
 
