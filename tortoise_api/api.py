@@ -64,8 +64,8 @@ class Api:
 
         # self.module =
         self.set_models(module, exc_models)
-
-        self.oauth = oauth or OAuth(TOKEN, self.models["User"])
+        self.db_url = db_url
+        self.oauth = oauth
 
         # get auth token route
         auth_routes = [
