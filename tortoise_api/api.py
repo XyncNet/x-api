@@ -21,7 +21,7 @@ from tortoise_api_model.enum import Scope
 from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import PydList, Names
 
-from tortoise_api.loader import TOKEN, DB_URL, _repr
+from tortoise_api.loader import _repr
 from tortoise_api.oauth import OAuth, on_error
 
 
@@ -36,6 +36,7 @@ class ListArgs(BaseModel):
 class Api:
     app: FastAPI
     module: ModuleType
+    db_url: str
     models: {str: Model}
     oauth: OAuth
     redis = None
@@ -44,6 +45,7 @@ class Api:
     def __init__(
         self,
         module: ModuleType,
+        db_url: str,
         debug: bool = False,
         title: str = "FemtoAPI",
         exc_models: set[str] = None,
@@ -100,7 +102,7 @@ class Api:
 
         # FastAPICache.init(InMemoryBackend(), expire=600)
         # db init
-        register_tortoise(self.app, db_url=DB_URL, modules={"models": [self.module]}, generate_schemas=debug)
+        register_tortoise(self.app, db_url=self.db_url, modules={"models": [self.module]}, generate_schemas=debug)
 
     def set_models(self, modul, excm: set[str]):
         # extract models from module

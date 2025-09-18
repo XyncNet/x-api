@@ -15,7 +15,7 @@ from tortoise_api_model.enum import Scope, UserRole, UserStatus
 from tortoise_api_model.model import Model
 from tortoise_api_model.pydantic import UserReg, UserSchema
 
-from tortoise_api.loader import TOKEN, user_upsert
+from tortoise_api.loader import user_upsert
 
 
 class AuthFailReason(IntEnum):
@@ -123,7 +123,7 @@ class OAuth(AuthenticationBackend):
         # try:
         scheme, credentials = auth.split()
         if scheme.lower() == "tgdata":
-            tgData = safe_parse_webapp_init_data(TOKEN, credentials)
+            tgData = safe_parse_webapp_init_data(self.secret, credentials)
             scheme = "bearer"
             credentials = (await self.get_token_for_tg(tgData.user)).access_token
         if scheme.lower() == "bearer":

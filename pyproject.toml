@@ -13,7 +13,6 @@ dynamic = ["version"]
 dependencies = [
     "aiogram",
     "asyncpg",
-    "python-dotenv",
     "fastapi",
 #    "fastapi-cache2",
     "orjson",
@@ -29,6 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "build",
+    "python-dotenv",
     "twine",
     "setuptools_scm",
 ]

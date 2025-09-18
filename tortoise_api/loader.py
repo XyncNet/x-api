@@ -1,14 +1,7 @@
 from enum import Enum
-from os import getenv as env
 from aiogram.types import User as TgUser
 from aiogram.utils.web_app import WebAppUser
-from dotenv import load_dotenv
 from tg_auth import UserStatus, Lang, User
-
-load_dotenv()
-
-TOKEN = env("TOKEN")
-DB_URL = env("DB_URL")
 
 
 async def user_upsert(u: TgUser | WebAppUser, status: UserStatus = None) -> (User, bool):
